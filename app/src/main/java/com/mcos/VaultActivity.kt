@@ -38,13 +38,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 
-data class EncryptedVaultItem(
-    val file: File,
-    val originalName: String,
-    val formattedSize: String,
-    val type: String
-)
-
 class VaultActivity : ComponentActivity() {
 
     companion object {
@@ -89,7 +82,6 @@ fun VaultSecureApp(
     val accent = Color(0xFF10B981)
     val border = Color(0xFF1E293B)
 
-    // Hidden Private Directory (.nomedia ensures 100% hidden from Gallery & File Managers)
     val vaultDirectory = remember {
         val dir = File(context.filesDir, ".mcos_secret_encrypted_vault")
         if (!dir.exists()) dir.mkdirs()
@@ -111,7 +103,6 @@ fun VaultSecureApp(
         if (isUnlocked) refreshVaultList()
     }
 
-    // Pick ANY Document / Media File Launcher
     val documentPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
@@ -124,9 +115,7 @@ fun VaultSecureApp(
                         val rawBytes = inputStream?.readBytes() ?: byteArrayOf()
                         inputStream?.close()
 
-                        // Encrypt bytes via C++ libvault.so
                         val encryptedBytes = onEncryptDecrypt(rawBytes, currentPin)
-
                         val targetFile = File(vaultDirectory, "enc_${System.currentTimeMillis()}_${(100..999).random()}.mcos")
                         FileOutputStream(targetFile).use { it.write(encryptedBytes) }
                     } catch (e: Exception) {
@@ -144,7 +133,6 @@ fun VaultSecureApp(
 
     Surface(modifier = Modifier.fillMaxSize(), color = bg) {
         if (!isUnlocked) {
-            // PIN Lock / Setup Screen
             Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(modifier = Modifier.size(72.dp).clip(CircleShape).background(accent.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
@@ -192,7 +180,6 @@ fun VaultSecureApp(
                 }
             }
         } else {
-            // Unlocked Vault Screen
             Scaffold(
                 containerColor = bg,
                 topBar = {
@@ -256,7 +243,6 @@ fun VaultSecureApp(
                                         }
 
                                         Row {
-                                            // Decrypt & Restore / Backup Button
                                             IconButton(
                                                 onClick = {
                                                     scope.launch(Dispatchers.IO) {
@@ -280,7 +266,6 @@ fun VaultSecureApp(
                                                 Icon(imageVector = Icons.Default.CloudDownload, contentDescription = "Backup", tint = accent)
                                             }
 
-                                            // Delete Button
                                             IconButton(
                                                 onClick = {
                                                     item.file.delete()
