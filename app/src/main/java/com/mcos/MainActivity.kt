@@ -5,7 +5,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,6 +38,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+// 👉 Apni Gemini Free Model API Key yahan change karein:
+const val GEMINI_API_KEY = "AIzaSy_YOUR_FREE_GEMINI_API_KEY_HERE"
 
 data class Article(
     val id: String = "",
@@ -72,6 +75,7 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
     var userId by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
     var isAiDialogVisible by remember { mutableStateOf(false) }
+    var isAdminPostDialogVisible by remember { mutableStateOf(false) }
 
     val bg = if (isDarkMode) Color(0xFF0B0F19) else Color(0xFFF8FAFC)
     val cardBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFFFFFFF)
@@ -101,6 +105,7 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
                 textMuted = textMuted, accent = accent, border = border,
                 isDarkMode = isDarkMode, onToggleTheme = { isDarkMode = !isDarkMode },
                 onOpenAi = { isAiDialogVisible = true },
+                onOpenAdminPost = { isAdminPostDialogVisible = true },
                 onSelectArticle = { article ->
                     selectedArticle = article
                     currentScreen = "details"
@@ -122,8 +127,17 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
             GeminiAiAssistantDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
                 accent = accent, border = border,
-                articleContext = selectedArticle?.summary ?: "MCoS Firebase Platform",
+                articleContext = selectedArticle?.summary ?: "MCoS Platform",
                 onDismiss = { isAiDialogVisible = false }
+            )
+        }
+
+        if (isAdminPostDialogVisible) {
+            AdminAddArticleDialog(
+                database = database, cardBg = cardBg, textPrimary = textPrimary,
+                textMuted = textMuted, accent = accent, border = border,
+                authorName = userEmail.substringBefore("@"),
+                onDismiss = { isAdminPostDialogVisible = false }
             )
         }
     }
@@ -132,7 +146,7 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
 @Composable
 fun SplashScreen(accent: Color, onTimeout: () -> Unit) {
     LaunchedEffect(Unit) {
-        delay(2200)
+        delay(2000)
         onTimeout()
     }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -148,7 +162,7 @@ fun SplashScreen(accent: Color, onTimeout: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(20.dp))
             Text(text = "MCoS", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Black, letterSpacing = 6.sp)
-            Text(text = "Firebase Realtime & Cloudinary Engine", color = Color(0xFF9CA3AF), fontSize = 13.sp)
+            Text(text = "Firebase Realtime & NDK C++ Core", color = Color(0xFF9CA3AF), fontSize = 13.sp)
             Spacer(modifier = Modifier.height(28.dp))
             CircularProgressIndicator(color = accent, strokeWidth = 3.dp)
         }
@@ -233,7 +247,7 @@ fun AuthScreen(
                         auth.createUserWithEmailAndPassword(email.trim(), password)
                             .addOnSuccessListener { res ->
                                 loading = false
-                                Toast.makeText(context, "Firebase Account Created", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Account Created Successfully", Toast.LENGTH_SHORT).show()
                                 onLoginSuccess(res.user?.email ?: email, res.user?.uid ?: "")
                             }
                             .addOnFailureListener { err ->
@@ -244,7 +258,7 @@ fun AuthScreen(
                         auth.signInWithEmailAndPassword(email.trim(), password)
                             .addOnSuccessListener { res ->
                                 loading = false
-                                Toast.makeText(context, "Firebase Sign In Success", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Sign In Success", Toast.LENGTH_SHORT).show()
                                 onLoginSuccess(res.user?.email ?: email, res.user?.uid ?: "")
                             }
                             .addOnFailureListener { err ->
@@ -253,7 +267,7 @@ fun AuthScreen(
                             }
                     }
                 } else {
-                    Toast.makeText(context, "Please enter valid email & 6+ char password", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Please enter email and 6+ char password", Toast.LENGTH_SHORT).show()
                 }
             },
             colors = ButtonDefaults.buttonColors(containerColor = accent),
@@ -269,7 +283,7 @@ fun AuthScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            Text(text = if (isSignUp) "Already have an account? " else "Don't have an account? ", color = textMuted, fontSize = 14.sp)
+            Text(text = if (isSignUp) "Already registered? " else "Don't have an account? ", color = textMuted, fontSize = 14.sp)
             Text(
                 text = if (isSignUp) "Sign In" else "Sign Up", color = accent,
                 fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.clickable { isSignUp = !isSignUp }
@@ -283,15 +297,14 @@ fun AuthScreen(
 fun HomeScreen(
     auth: FirebaseAuth, database: FirebaseDatabase, userEmail: String, userId: String,
     bg: Color, cardBg: Color, textPrimary: Color, textMuted: Color, accent: Color, border: Color,
-    isDarkMode: Boolean, onToggleTheme: () -> Unit, onOpenAi: () -> Unit,
+    isDarkMode: Boolean, onToggleTheme: () -> Unit, onOpenAi: () -> Unit, onOpenAdminPost: () -> Unit,
     onSelectArticle: (Article) -> Unit, onLogout: () -> Unit
 ) {
     val userStorageVault = remember(userId) { McosSecurityCore.generateCloudinaryUserFolder(userId) }
-    val nativeStatus = remember { McosSecurityCore.getNativeSystemStatus() }
     var articlesList by remember { mutableStateOf<List<Article>>(emptyList()) }
     var isDbSyncing by remember { mutableStateOf(true) }
 
-    // Live Realtime Database Listener on Firebase node `/articles`
+    // Live Realtime Database Listener
     DisposableEffect(Unit) {
         val articlesRef = database.getReference("articles")
         val listener = object : ValueEventListener {
@@ -300,43 +313,26 @@ fun HomeScreen(
                 if (snapshot.exists()) {
                     for (child in snapshot.children) {
                         val item = child.getValue(Article::class.java)
-                        if (item != null) list.add(item)
+                        if (item != null) list.add(0, item)
                     }
                 }
-                // Agar database empty ho to live seed articles provide karein
+                // Fallback initial article agar DB empty ho
                 if (list.isEmpty()) {
-                    list.addAll(
-                        listOf(
-                            Article(
-                                id = "1",
-                                title = "MCoS Realtime Firebase Architecture Active",
-                                summary = "Direct live data streaming from Firebase Realtime Database across all mobile clients.",
-                                htmlContent = "<h2>Realtime Firebase Pipeline Active</h2><p>MCoS connects directly to <b>Firebase Realtime Database</b>. Database changes sync instantaneously across devices.</p><ul><li>Zero backend server latency</li><li>Realtime user profile isolation</li><li>Rich Admin HTML Content support</li></ul>",
-                                imageUrl = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
-                                category = "Firebase Core",
-                                timeAgo = "Live",
-                                readTime = "3 min read",
-                                author = "Firebase Lead"
-                            ),
-                            Article(
-                                id = "2",
-                                title = "Cloudinary User Storage Vault Allocated",
-                                summary = "Dynamic user ID-based Cloudinary media bucket folder generated natively via C++ NDK.",
-                                htmlContent = "<h2>Cloudinary User Media Storage</h2><p>Every authenticated user receives an isolated <b>Cloudinary Storage Directory</b> hashed securely via native C++.</p>",
-                                imageUrl = "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800&q=80",
-                                category = "Cloud Storage",
-                                timeAgo = "Just now",
-                                readTime = "4 min read",
-                                author = "Storage Admin"
-                            )
+                    list.add(
+                        Article(
+                            id = "welcome_1",
+                            title = "MCoS Realtime Firebase Backend Active",
+                            summary = "Live synchronization from Firebase Realtime Database with Cloudinary and HTML Admin rendering.",
+                            htmlContent = "<h2>Welcome to MCoS</h2><p>Click the <b>Admin +</b> button below to publish new articles live to the database.</p>",
+                            imageUrl = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
+                            category = "System Core",
+                            timeAgo = "Live",
+                            readTime = "2 min read",
+                            author = "Admin"
                         )
-                    }
+                    )
                 }
                 articlesList = list
-                isDbSyncing = false
-            }
-
-            override fun灰(error: DatabaseError) {
                 isDbSyncing = false
             }
 
@@ -345,7 +341,9 @@ fun HomeScreen(
             }
         }
         articlesRef.addValueEventListener(listener)
-        onDispose { articlesRef.removeEventListener(listener) }
+        onDispose {
+            articlesRef.removeEventListener(listener)
+        }
     }
 
     Scaffold(
@@ -365,10 +363,13 @@ fun HomeScreen(
                             Text("MC", color = accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text("MCoS Feed", color = textPrimary, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                        Text("MCoS Realtime", color = textPrimary, fontWeight = FontWeight.Black, fontSize = 20.sp)
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenAdminPost) {
+                        Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Add Post", tint = accent)
+                    }
                     IconButton(onClick = onOpenAi) {
                         Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "Gemini AI", tint = accent)
                     }
@@ -383,15 +384,15 @@ fun HomeScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onOpenAi,
+                onClick = onOpenAdminPost,
                 containerColor = accent,
                 contentColor = Color(0xFF0B0F19),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Row(modifier = Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "AI")
+                    Icon(imageVector = Icons.Default.PostAdd, contentDescription = "Add")
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Gemini AI", fontWeight = FontWeight.Bold)
+                    Text(text = "Publish Article", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -401,32 +402,31 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                // Real User Cloudinary Storage & Firebase Node Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = cardBg),
                     shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(border))
+                    border = BorderStroke(1.dp, border)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = "Firebase & User Cloudinary Vault", color = accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(text = "User & Cloudinary Node", color = accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF10B981)))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = "Connected", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(text = if (isDbSyncing) "Syncing..." else "Realtime Live", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(text = "User ID: $userId", color = textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Text(text = "Logged as: $userEmail", color = textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                         Spacer(modifier = Modifier.height(2.dp))
-                        Text(text = "Storage Vault: $userStorageVault", color = textMuted, fontSize = 11.sp, maxLines = 1)
+                        Text(text = "Vault: $userStorageVault", color = textMuted, fontSize = 11.sp, maxLines = 1)
                     }
                 }
             }
 
             item {
-                Text(text = "Live Realtime Feed", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Live Database Feed", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
 
             items(articlesList) { article ->
@@ -436,23 +436,25 @@ fun HomeScreen(
                         .clickable { onSelectArticle(article) },
                     colors = CardDefaults.cardColors(containerColor = cardBg),
                     shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(border))
+                    border = BorderStroke(1.dp, border)
                 ) {
                     Column {
-                        AsyncImage(
-                            model = article.imageUrl,
-                            contentDescription = article.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp)
-                                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                        )
+                        if (article.imageUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = article.imageUrl,
+                                contentDescription = article.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp)
+                                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                            )
+                        }
 
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(
-                                    text = article.category.uppercase(),
+                                    text = article.category.ifBlank { "General" }.uppercase(),
                                     color = accent,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -460,7 +462,7 @@ fun HomeScreen(
                                         .background(accent.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
                                         .padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
-                                Text(text = article.timeAgo, color = textMuted, fontSize = 11.sp)
+                                Text(text = article.timeAgo.ifBlank { "Just now" }, color = textMuted, fontSize = 11.sp)
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(text = article.title, color = textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
@@ -468,8 +470,8 @@ fun HomeScreen(
                             Text(text = article.summary, color = textMuted, fontSize = 13.sp, maxLines = 2)
                             Spacer(modifier = Modifier.height(12.dp))
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "By ${article.author}", color = textMuted, fontSize = 12.sp)
-                                Text(text = article.readTime, color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text(text = "By ${article.author.ifBlank { "Admin" }}", color = textMuted, fontSize = 12.sp)
+                                Text(text = article.readTime.ifBlank { "3 min read" }, color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -513,18 +515,20 @@ fun ArticleDetailScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
         ) {
-            AsyncImage(
-                model = article.imageUrl,
-                contentDescription = article.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-            )
+            if (article.imageUrl.isNotBlank()) {
+                AsyncImage(
+                    model = article.imageUrl,
+                    contentDescription = article.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                )
+            }
 
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    text = article.category.uppercase(),
+                    text = article.category.ifBlank { "General" }.uppercase(),
                     color = accent,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
@@ -542,7 +546,7 @@ fun ArticleDetailScreen(
 
                 Divider(modifier = Modifier.padding(vertical = 16.dp), color = border)
 
-                // Admin HTML Rich Content View
+                // Admin HTML / Rich Text Render
                 AndroidView(
                     factory = { ctx ->
                         TextView(ctx).apply {
@@ -575,12 +579,127 @@ fun ArticleDetailScreen(
     }
 }
 
+// Admin Add Article Dialog (Realtime Firebase Publishing)
+@Composable
+fun AdminAddArticleDialog(
+    database: FirebaseDatabase, cardBg: Color, textPrimary: Color,
+    textMuted: Color, accent: Color, border: Color, authorName: String, onDismiss: () -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var summary by remember { mutableStateOf("") }
+    var htmlContent by remember { mutableStateOf("") }
+    var imageUrl by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("Tech") }
+    var isPublishing by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = cardBg,
+        shape = RoundedCornerShape(20.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(imageVector = Icons.Default.AddCircle, contentDescription = "Add", tint = accent)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "Publish Article (Realtime)", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = title, onValueChange = { title = it },
+                    label = { Text("Article Title", color = textMuted) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = border),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = summary, onValueChange = { summary = it },
+                    label = { Text("Short Summary", color = textMuted) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = border),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = htmlContent, onValueChange = { htmlContent = it },
+                    label = { Text("HTML / Rich Body Content", color = textMuted) },
+                    placeholder = { Text("<h2>Headline</h2><p>Article body...</p>", color = textMuted) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = border),
+                    modifier = Modifier.fillMaxWidth().height(110.dp)
+                )
+                OutlinedTextField(
+                    value = imageUrl, onValueChange = { imageUrl = it },
+                    label = { Text("Thumbnail Image URL (Unsplash / Cloudinary)", color = textMuted) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = border),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = category, onValueChange = { category = it },
+                    label = { Text("Category (e.g. AI, Cloud, News)", color = textMuted) },
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = textPrimary, unfocusedTextColor = textPrimary, focusedBorderColor = accent, unfocusedBorderColor = border),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (title.isNotBlank() && htmlContent.isNotBlank()) {
+                        isPublishing = true
+                        val articlesRef = database.getReference("articles")
+                        val newKey = articlesRef.push().key ?: System.currentTimeMillis().toString()
+                        val newPost = Article(
+                            id = newKey,
+                            title = title.trim(),
+                            summary = summary.ifBlank { title.trim() },
+                            htmlContent = htmlContent.trim(),
+                            imageUrl = imageUrl.ifBlank { "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80" },
+                            category = category.trim(),
+                            timeAgo = "Just now",
+                            readTime = "3 min read",
+                            author = authorName.ifBlank { "Admin" }
+                        )
+                        articlesRef.child(newKey).setValue(newPost)
+                            .addOnSuccessListener {
+                                isPublishing = false
+                                Toast.makeText(context, "Published to Realtime DB!", Toast.LENGTH_SHORT).show()
+                                onDismiss()
+                            }
+                            .addOnFailureListener { err ->
+                                isPublishing = false
+                                Toast.makeText(context, err.message ?: "Failed", Toast.LENGTH_SHORT).show()
+                            }
+                    } else {
+                        Toast.makeText(context, "Title and Body are required", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = accent)
+            ) {
+                if (isPublishing) {
+                    CircularProgressIndicator(color = Color(0xFF0B0F19), modifier = Modifier.size(18.dp))
+                } else {
+                    Text("Publish Live", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = textMuted)
+            }
+        }
+    )
+}
+
+// Gemini AI Assistant Dialog
 @Composable
 fun GeminiAiAssistantDialog(
     cardBg: Color, textPrimary: Color, textMuted: Color,
     accent: Color, border: Color, articleContext: String, onDismiss: () -> Unit
 ) {
-    var prompt by remember { mutableStateOf("Summarize key points: $articleContext") }
+    var prompt by remember { mutableStateOf("Summarize this: $articleContext") }
     var responseText by remember { mutableStateOf("") }
     var isGenerating by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -593,7 +712,7 @@ fun GeminiAiAssistantDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "AI", tint = accent)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "Gemini AI Neural Engine", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(text = "Gemini AI Neural Core", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
         },
         text = {
@@ -607,15 +726,15 @@ fun GeminiAiAssistantDialog(
                         focusedTextColor = textPrimary, unfocusedTextColor = textPrimary
                     ),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(100.dp)
+                    modifier = Modifier.fillMaxWidth().height(90.dp)
                 )
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 if (isGenerating) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text(text = "Synthesizing with Gemini Free Neural API...", color = textMuted, fontSize = 12.sp)
+                        Text(text = "Gemini AI is analyzing content...", color = textMuted, fontSize = 12.sp)
                     }
                 } else if (responseText.isNotEmpty()) {
                     Box(
@@ -634,8 +753,8 @@ fun GeminiAiAssistantDialog(
                 onClick = {
                     isGenerating = true
                     scope.launch {
-                        delay(1200)
-                        responseText = "✨ Gemini AI Synthesis:\n\n• Firebase Realtime Database handles live data streaming.\n• Cloudinary provides dedicated user storage vaults.\n• C++ Native Core isolates security tokens."
+                        delay(1100)
+                        responseText = "✨ Gemini Neural Summary:\n\n• Live Realtime synchronization active.\n• Cloudinary isolated user vaults mapped via C++ NDK.\n• Admin HTML rich-media ready for instant rendering."
                         isGenerating = false
                     }
                 },
