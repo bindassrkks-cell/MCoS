@@ -9,7 +9,6 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.annotation.OptIn
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -111,7 +110,7 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
     val currentUid = auth.currentUser?.uid ?: ""
     val currentEmail = auth.currentUser?.email ?: ""
 
-    // Realtime User Coins Listener
+    // Realtime User Coins Sync
     LaunchedEffect(currentUid) {
         if (currentUid.isNotEmpty()) {
             val ref = database.getReference("users").child(currentUid).child("coins")
@@ -164,7 +163,6 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
             )
         }
 
-        // Secret Vault PIN Trigger
         if (isVaultPinDialogVisible) {
             VaultPinDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
@@ -177,7 +175,6 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
             )
         }
 
-        // Realtime Gemini AI Dialog
         if (isAiDialogVisible) {
             RealGeminiAiDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
@@ -739,7 +736,7 @@ fun WalletScreen(
     }
 }
 
-// 5. ADS & REWARD OFFERS SCREEN (GOOGLE ADS STYLE GRID & BADGES)
+// 5. ADS & REWARD OFFERS SCREEN (GOOGLE ADS STYLE 2-COLUMN GRID)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RewardsOfferScreen(
@@ -765,7 +762,7 @@ fun RewardsOfferScreen(
                         AdminAdOffer(
                             id = "ad_1",
                             title = "GooDady Web Hosting",
-                            description = "Watch high-speed promo video to win coins",
+                            description = "Watch promo video to win coins",
                             rewardCoins = 50,
                             durationSec = 10,
                             skipAfterSec = 5,
@@ -828,7 +825,6 @@ fun RewardsOfferScreen(
                     border = BorderStroke(1.dp, border)
                 ) {
                     Column {
-                        // Media Thumbnail Box with Google Ads Badge Overlay
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -841,14 +837,13 @@ fun RewardsOfferScreen(
                                 modifier = Modifier.fillMaxSize()
                             )
 
-                            // Gradient Shade
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .background(Brush.verticalGradient(listOf(Color(0x99000000), Color.Transparent, Color(0xAA080B11))))
                             )
 
-                            // Top-Left: Google Ads Mohar / Badge
+                            // Google Ads Mohar / Badge
                             Row(
                                 modifier = Modifier
                                     .align(Alignment.TopStart)
@@ -877,24 +872,6 @@ fun RewardsOfferScreen(
                                 )
                             }
 
-                            // Top-Right: Video / Banner Tag
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(8.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xCC000000))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (offer.type == "VIDEO_AD") Icons.Default.PlayArrow else Icons.Default.Image,
-                                    contentDescription = null,
-                                    tint = accent,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            }
-
-                            // Center: Video Play Overlay
                             if (offer.type == "VIDEO_AD") {
                                 Box(
                                     modifier = Modifier
@@ -909,7 +886,6 @@ fun RewardsOfferScreen(
                             }
                         }
 
-                        // Content Details
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -933,7 +909,6 @@ fun RewardsOfferScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            // Reward Coins Tag
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -958,7 +933,6 @@ fun RewardsOfferScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // Action CTA Button
                             Button(
                                 onClick = {
                                     activeAd = offer
@@ -982,7 +956,6 @@ fun RewardsOfferScreen(
             }
         }
 
-        // FULLSCREEN IN-STREAM VIDEO & BANNER AD PLAYER
         if (isWatchingAd && activeAd != null) {
             FullscreenAdPlayer(
                 ad = activeAd!!,
@@ -1010,7 +983,6 @@ fun FullscreenAdPlayer(
     var isRewardClaimed by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(true) }
 
-    // Countdown Timer
     LaunchedEffect(Unit) {
         while (remainingTime > 0) {
             delay(1000)
@@ -1023,7 +995,6 @@ fun FullscreenAdPlayer(
         }
     }
 
-    // Auto-fix GitHub links if entered as blob
     val formattedVideoUrl = remember(ad.videoUrl) {
         var url = ad.videoUrl.trim()
         if (url.contains("github.com") && url.contains("/blob/")) {
@@ -1032,7 +1003,6 @@ fun FullscreenAdPlayer(
         url
     }
 
-    // ExoPlayer Setup with Cross-Protocol Redirect & Custom User-Agent
     val exoPlayer = remember(formattedVideoUrl) {
         if (ad.type == "VIDEO_AD" && formattedVideoUrl.isNotBlank()) {
             val httpDataSourceFactory = DefaultHttpDataSource.Factory()
@@ -1074,7 +1044,6 @@ fun FullscreenAdPlayer(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            // LAYER 1: Video View or Banner
             if (ad.type == "VIDEO_AD" && exoPlayer != null) {
                 AndroidView(
                     factory = { ctx ->
@@ -1105,7 +1074,6 @@ fun FullscreenAdPlayer(
                 )
             }
 
-            // Dark Overlays
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1116,7 +1084,6 @@ fun FullscreenAdPlayer(
                     )
             )
 
-            // LAYER 2: Top Bar (Google Ad Mohar + Title + CTA Website Button)
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -1161,7 +1128,6 @@ fun FullscreenAdPlayer(
                 }
             }
 
-            // LAYER 3: Bottom Control Bar (Reward Timer & YouTube-Style Skip Overlay)
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
