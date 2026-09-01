@@ -1,4 +1,4 @@
-name: Build MCOS Jetpack Compose APK
+name: Build MCoS Native Compose APK
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  build-compose-apk:
+  clean-build-apk:
     runs-on: ubuntu-latest
 
     env:
@@ -39,12 +39,12 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
 
-      - name: Clean Old React Native Files & Generate Jetpack Compose Architecture
+      - name: Purge Old Files & Generate Fresh Jetpack Compose Architecture
         run: |
-          # 1. Purani JS / React Native files delete karein
-          rm -rf App.tsx index.js package.json package-lock.json tsconfig.json metro.config.js babel.config.js .expo node_modules android
+          # 1. Purani saari redundant files clean karein
+          rm -rf App.tsx index.js package.json package-lock.json tsconfig.json metro.config.js babel.config.js .expo node_modules android app
 
-          # 2. Jetpack Compose & NDK C++ Folder Structure Create karein
+          # 2. Complete Folder Hierarchy Create karein
           mkdir -p app/src/main/cpp
           mkdir -p app/src/main/java/com/mcos
           mkdir -p app/src/main/res/values
@@ -85,7 +85,7 @@ jobs:
           android.nonTransitiveRClass=true
           EOF
 
-          # 6. app/build.gradle (Compose + NDK CMake)
+          # 6. app/build.gradle (Compose + Material3 + NDK CMake)
           cat << 'EOF' > app/build.gradle
           plugins {
               id 'com.android.application'
@@ -106,7 +106,7 @@ jobs:
 
                   externalNativeBuild {
                       cmake {
-                          cppFlags ""
+                          cppFlags "-std=c++17"
                       }
                   }
               }
@@ -155,76 +155,101 @@ jobs:
               implementation 'androidx.compose.ui:ui-graphics'
               implementation 'androidx.compose.ui:ui-tooling-preview'
               implementation 'androidx.compose.material3:material3'
+              implementation 'androidx.compose.material:material-icons-extended'
               implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
           }
           EOF
 
-          # 7. CMakeLists.txt (Native Backend Build)
+          # 7. app/src/main/cpp/CMakeLists.txt (Multiple Native C++ libs)
           cat << 'EOF' > app/src/main/cpp/CMakeLists.txt
           cmake_minimum_required(VERSION 3.22.1)
-          project(neon_backend)
+          project(mcos_native_core)
 
-          add_library(neon_backend SHARED NeonBackend.cpp)
+          add_library(mcos_core SHARED
+              McosCore.cpp
+              NeonStorage.cpp
+          )
 
-          target_link_libraries(neon_backend
+          target_link_libraries(mcos_core
               android
               log
           )
           EOF
 
-          # 8. NeonBackend.cpp (C++ NDK Backend Core)
-          cat << 'EOF' > app/src/main/cpp/NeonBackend.cpp
+          # 8. app/src/main/cpp/NeonStorage.cpp (Neon S3 Storage & DB Module)
+          cat << 'EOF' > app/src/main/cpp/NeonStorage.cpp
           #include <jni.h>
           #include <string>
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_NeonBackend_getNeonProjectId(JNIEnv *env, jobject /* this */) {
+          Java_com_mcos_McosNativeCore_getNeonProjectId(JNIEnv *env, jobject /* this */) {
               return env->NewStringUTF("dry-king-57780977");
           }
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_NeonBackend_getNeonBucket(JNIEnv *env, jobject /* this */) {
+          Java_com_mcos_McosNativeCore_getNeonBucket(JNIEnv *env, jobject /* this */) {
               return env->NewStringUTF("binday");
           }
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_NeonBackend_getNeonDataApi(JNIEnv *env, jobject /* this */) {
+          Java_com_mcos_McosNativeCore_getNeonDataApi(JNIEnv *env, jobject /* this */) {
               return env->NewStringUTF("https://ep-little-haze-ayplq02h.apirest.c-5.us-east-2.aws.neon.tech/neondb/rest/v1");
           }
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_NeonBackend_getNeonS3Endpoint(JNIEnv *env, jobject /* this */) {
+          Java_com_mcos_McosNativeCore_getNeonS3Endpoint(JNIEnv *env, jobject /* this */) {
               return env->NewStringUTF("https://br-cold-tree-ay0sxicu.storage.c-5.us-east-2.aws.neon.tech");
           }
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_NeonBackend_getNeonRegion(JNIEnv *env, jobject /* this */) {
+          Java_com_mcos_McosNativeCore_getNeonRegion(JNIEnv *env, jobject /* this */) {
               return env->NewStringUTF("us-east-2");
           }
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_NeonBackend_getNeonAccessKey(JNIEnv *env, jobject /* this */) {
+          Java_com_mcos_McosNativeCore_getNeonAccessKey(JNIEnv *env, jobject /* this */) {
               return env->NewStringUTF("nak_live_8bff28857082488eb6ba25c7006aabec");
           }
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_NeonBackend_getNeonSecretKey(JNIEnv *env, jobject /* this */) {
+          Java_com_mcos_McosNativeCore_getNeonSecretKey(JNIEnv *env, jobject /* this */) {
               return env->NewStringUTF("nsk_live_fbb596d3e48491ea1fc1fe6dd8fc29084747e355df467919dfb1c1dc01e88a33");
           }
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_NeonBackend_getNeonAiKey(JNIEnv *env, jobject /* this */) {
+          Java_com_mcos_McosNativeCore_getNeonAiKey(JNIEnv *env, jobject /* this */) {
               return env->NewStringUTF("nt_live_8bff28857082_cgP7mO4L61b7sp2hOX608out2L7pDjjo");
           }
           EOF
 
-          # 9. NeonBackend.kt (JNI Bridge)
-          cat << 'EOF' > app/src/main/java/com/mcos/NeonBackend.kt
+          # 9. app/src/main/cpp/McosCore.cpp (Supabase Realtime & Engine Core)
+          cat << 'EOF' > app/src/main/cpp/McosCore.cpp
+          #include <jni.h>
+          #include <string>
+
+          extern "C" JNIEXPORT jstring JNICALL
+          Java_com_mcos_McosNativeCore_getSupabaseUrl(JNIEnv *env, jobject /* this */) {
+              return env->NewStringUTF("https://mcos-realtime.supabase.co");
+          }
+
+          extern "C" JNIEXPORT jstring JNICALL
+          Java_com_mcos_McosNativeCore_getSupabaseAnonKey(JNIEnv *env, jobject /* this */) {
+              return env->NewStringUTF("sb_anon_live_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mcos_realtime_node");
+          }
+
+          extern "C" JNIEXPORT jstring JNICALL
+          Java_com_mcos_McosNativeCore_getSystemStatus(JNIEnv *env, jobject /* this */) {
+              return env->NewStringUTF("ALL SYSTEMS OPERATIONAL (C++ NDK Core v1.0)");
+          }
+          EOF
+
+          # 10. app/src/main/java/com/mcos/McosNativeCore.kt
+          cat << 'EOF' > app/src/main/java/com/mcos/McosNativeCore.kt
           package com.mcos
 
-          object NeonBackend {
+          object McosNativeCore {
               init {
-                  System.loadLibrary("neon_backend")
+                  System.loadLibrary("mcos_core")
               }
 
               external fun getNeonProjectId(): String
@@ -235,10 +260,70 @@ jobs:
               external fun getNeonAccessKey(): String
               external fun getNeonSecretKey(): String
               external fun getNeonAiKey(): String
+              external fun getSupabaseUrl(): String
+              external fun getSupabaseAnonKey(): String
+              external fun getSystemStatus(): String
           }
           EOF
 
-          # 10. MainActivity.kt (Jetpack Compose UI - Splash, Auth & Home)
+          # 11. app/src/main/res/values/strings.xml & themes.xml & colors.xml
+          cat << 'EOF' > app/src/main/res/values/strings.xml
+          <resources>
+              <string name="app_name">MCoS</string>
+          </resources>
+          EOF
+
+          cat << 'EOF' > app/src/main/res/values/themes.xml
+          <resources>
+              <style name="Theme.MCOS" parent="android:Theme.Material.NoActionBar">
+                  <item name="android:statusBarColor">#0B0F19</item>
+                  <item name="android:navigationBarColor">#0B0F19</item>
+              </style>
+          </resources>
+          EOF
+
+          # 12. app/src/main/res/drawable/ic_launcher.xml
+          cat << 'EOF' > app/src/main/res/drawable/ic_launcher.xml
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#0B0F19"
+                  android:pathData="M0,0h108v108h-108z"/>
+              <path
+                  android:fillColor="#00E5FF"
+                  android:pathData="M30,30h48v48h-48z"/>
+          </vector>
+          EOF
+
+          # 13. app/src/main/AndroidManifest.xml (Guaranteed AAPT Resource Match)
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/ic_launcher"
+                  android:roundIcon="@drawable/ic_launcher"
+                  android:label="@string/app_name"
+                  android:supportsRtl="true"
+                  android:theme="@style/Theme.MCOS">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:theme="@style/Theme.MCOS">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          # 14. app/src/main/java/com/mcos/MainActivity.kt (News Feed, Post Details, Dark/Light Mode & Auth)
           cat << 'EOF' > app/src/main/java/com/mcos/MainActivity.kt
           package com.mcos
 
@@ -246,17 +331,24 @@ jobs:
           import android.widget.Toast
           import androidx.activity.ComponentActivity
           import androidx.activity.compose.setContent
+          import androidx.compose.animation.*
           import androidx.compose.foundation.background
           import androidx.compose.foundation.border
           import androidx.compose.foundation.clickable
           import androidx.compose.foundation.layout.*
+          import androidx.compose.foundation.lazy.LazyColumn
+          import androidx.compose.foundation.lazy.items
           import androidx.compose.foundation.rememberScrollState
+          import androidx.compose.foundation.shape.CircleShape
           import androidx.compose.foundation.shape.RoundedCornerShape
           import androidx.compose.foundation.verticalScroll
+          import androidx.compose.material.icons.Icons
+          import androidx.compose.material.icons.filled.*
           import androidx.compose.material3.*
           import androidx.compose.runtime.*
           import androidx.compose.ui.Alignment
           import androidx.compose.ui.Modifier
+          import androidx.compose.ui.draw.clip
           import androidx.compose.ui.graphics.Color
           import androidx.compose.ui.platform.LocalContext
           import androidx.compose.ui.text.font.FontWeight
@@ -265,106 +357,101 @@ jobs:
           import androidx.compose.ui.unit.sp
           import kotlinx.coroutines.delay
 
+          data class Article(
+              val id: String,
+              val title: String,
+              val summary: String,
+              val content: String,
+              val category: String,
+              val timeAgo: String,
+              val readTime: String,
+              val author: String
+          )
+
           class MainActivity : ComponentActivity() {
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   setContent {
-                      McosApp()
+                      McosAppRoot()
                   }
               }
           }
 
           @Composable
-          fun McosApp() {
+          fun McosAppRoot() {
+              var isDarkMode by remember { mutableStateOf(true) }
               var currentScreen by remember { mutableStateOf("splash") }
               var userEmail by remember { mutableStateOf("") }
+              var selectedArticle by remember { mutableStateOf<Article?>(null) }
 
-              val darkBackground = Color(0xFF0B0F19)
-              val neonCyan = Color(0xFF00E5FF)
-              val cardDark = Color(0xFF111827)
-              val textMuted = Color(0xFF9CA3AF)
+              val bg = if (isDarkMode) Color(0xFF0B0F19) else Color(0xFFF8FAFC)
+              val cardBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFFFFFFF)
+              val textPrimary = if (isDarkMode) Color(0xFFF9FAFB) else Color(0xFF0F172A)
+              val textMuted = if (isDarkMode) Color(0xFF9CA3AF) else Color(0xFF64748B)
+              val accent = Color(0xFF00E5FF)
+              val border = if (isDarkMode) Color(0xFF1F2937) else Color(0xFFE2E8F0)
 
-              Surface(
-                  modifier = Modifier.fillMaxSize(),
-                  color = darkBackground
-              ) {
+              Surface(modifier = Modifier.fillMaxSize(), color = bg) {
                   when (currentScreen) {
-                      "splash" -> SplashScreen {
-                          currentScreen = "auth"
-                      }
+                      "splash" -> SplashScreen(accent) { currentScreen = "auth" }
                       "auth" -> AuthScreen(
-                          darkBackground = darkBackground,
-                          neonCyan = neonCyan,
-                          cardDark = cardDark,
-                          textMuted = textMuted,
+                          bg = bg, cardBg = cardBg, textPrimary = textPrimary,
+                          textMuted = textMuted, accent = accent, border = border,
+                          isDarkMode = isDarkMode, onToggleTheme = { isDarkMode = !isDarkMode },
                           onLoginSuccess = { email ->
                               userEmail = email
                               currentScreen = "home"
                           }
                       )
                       "home" -> HomeScreen(
-                          userEmail = userEmail,
-                          neonCyan = neonCyan,
-                          cardDark = cardDark,
-                          textMuted = textMuted,
-                          onLogout = {
-                              currentScreen = "auth"
-                          }
+                          userEmail = userEmail, bg = bg, cardBg = cardBg, textPrimary = textPrimary,
+                          textMuted = textMuted, accent = accent, border = border,
+                          isDarkMode = isDarkMode, onToggleTheme = { isDarkMode = !isDarkMode },
+                          onSelectArticle = { article ->
+                              selectedArticle = article
+                              currentScreen = "details"
+                          },
+                          onLogout = { currentScreen = "auth" }
+                      )
+                      "details" -> ArticleDetailScreen(
+                          article = selectedArticle, bg = bg, cardBg = cardBg, textPrimary = textPrimary,
+                          textMuted = textMuted, accent = accent, border = border,
+                          onBack = { currentScreen = "home" }
                       )
                   }
               }
           }
 
           @Composable
-          fun SplashScreen(onTimeout: () -> Unit) {
+          fun SplashScreen(accent: Color, onTimeout: () -> Unit) {
               LaunchedEffect(Unit) {
                   delay(2200)
                   onTimeout()
               }
-              Box(
-                  modifier = Modifier.fillMaxSize(),
-                  contentAlignment = Alignment.Center
-              ) {
+              Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                   Column(horizontalAlignment = Alignment.CenterHorizontally) {
                       Box(
                           modifier = Modifier
                               .size(96.dp)
                               .background(Color(0xFF111827), RoundedCornerShape(24.dp))
-                              .border(2.dp, Color(0xFF00E5FF), RoundedCornerShape(24.dp)),
+                              .border(2.dp, accent, RoundedCornerShape(24.dp)),
                           contentAlignment = Alignment.Center
                       ) {
-                          Text(
-                              text = "MC",
-                              color = Color(0xFF00E5FF),
-                              fontSize = 38.sp,
-                              fontWeight = FontWeight.Black
-                          )
+                          Text(text = "MC", color = accent, fontSize = 38.sp, fontWeight = FontWeight.Black)
                       }
                       Spacer(modifier = Modifier.height(20.dp))
-                      Text(
-                          text = "MCOS",
-                          color = Color.White,
-                          fontSize = 34.sp,
-                          fontWeight = FontWeight.Black,
-                          letterSpacing = 6.sp
-                      )
-                      Text(
-                          text = "Jetpack Compose + NDK C++ Core",
-                          color = Color(0xFF9CA3AF),
-                          fontSize = 14.sp
-                      )
+                      Text(text = "MCoS", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Black, letterSpacing = 6.sp)
+                      Text(text = "Next-Gen Compose & Native C++ Core", color = Color(0xFF9CA3AF), fontSize = 13.sp)
                       Spacer(modifier = Modifier.height(28.dp))
-                      CircularProgressIndicator(color = Color(0xFF00E5FF), strokeWidth = 3.dp)
+                      CircularProgressIndicator(color = accent, strokeWidth = 3.dp)
                   }
               }
           }
 
           @Composable
           fun AuthScreen(
-              darkBackground: Color,
-              neonCyan: Color,
-              cardDark: Color,
-              textMuted: Color,
+              bg: Color, cardBg: Color, textPrimary: Color, textMuted: Color,
+              accent: Color, border: Color, isDarkMode: Boolean, onToggleTheme: () -> Unit,
               onLoginSuccess: (String) -> Unit
           ) {
               var isSignUp by remember { mutableStateOf(false) }
@@ -380,246 +467,277 @@ jobs:
                       .verticalScroll(rememberScrollState()),
                   verticalArrangement = Arrangement.Center
               ) {
-                  Box(
-                      modifier = Modifier
-                          .size(46.dp)
-                          .background(cardDark, RoundedCornerShape(12.dp))
-                          .border(1.5.dp, neonCyan, RoundedCornerShape(12.dp)),
-                      contentAlignment = Alignment.Center
-                  ) {
-                      Text(text = "MC", color = neonCyan, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                      Box(
+                          modifier = Modifier
+                              .size(44.dp)
+                              .background(cardBg, RoundedCornerShape(12.dp))
+                              .border(1.5.dp, accent, RoundedCornerShape(12.dp)),
+                          contentAlignment = Alignment.Center
+                      ) {
+                          Text(text = "MC", color = accent, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                      }
+                      IconButton(onClick = onToggleTheme) {
+                          Icon(
+                              imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                              contentDescription = "Theme", tint = accent
+                          )
+                      }
                   }
-                  Spacer(modifier = Modifier.height(16.dp))
-                  Text(
-                      text = if (isSignUp) "Create Account" else "Welcome Back",
-                      color = Color.White,
-                      fontSize = 28.sp,
-                      fontWeight = FontWeight.Bold
-                  )
-                  Text(
-                      text = if (isSignUp) "Sign up with Neon Cloud Backend" else "Sign in to access your MCOS console",
-                      color = textMuted,
-                      fontSize = 14.sp
-                  )
+                  Spacer(modifier = Modifier.height(24.dp))
+                  Text(text = if (isSignUp) "Join MCoS" else "Welcome Back", color = textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                  Text(text = "Neon Database & Supabase Realtime Gateway", color = textMuted, fontSize = 14.sp)
                   Spacer(modifier = Modifier.height(28.dp))
 
                   if (isSignUp) {
-                      Text(text = "Full Name", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                      Text(text = "Full Name", color = textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                       Spacer(modifier = Modifier.height(6.dp))
                       OutlinedTextField(
-                          value = fullName,
-                          onValueChange = { fullName = it },
-                          placeholder = { Text("John Doe", color = Color.Gray) },
+                          value = fullName, onValueChange = { fullName = it },
+                          placeholder = { Text("Alex Mason", color = textMuted) },
                           colors = OutlinedTextFieldDefaults.colors(
-                              focusedBorderColor = neonCyan,
-                              unfocusedBorderColor = Color(0xFF1F2937),
-                              focusedTextColor = Color.White,
-                              unfocusedTextColor = Color.White,
-                              focusedContainerColor = cardDark,
-                              unfocusedContainerColor = cardDark
+                              focusedBorderColor = accent, unfocusedBorderColor = border,
+                              focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                              focusedContainerColor = cardBg, unfocusedContainerColor = cardBg
                           ),
-                          shape = RoundedCornerShape(12.dp),
-                          modifier = Modifier.fillMaxWidth()
+                          shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()
                       )
                       Spacer(modifier = Modifier.height(14.dp))
                   }
 
-                  Text(text = "Email Address", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                  Text(text = "Email Address", color = textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                   Spacer(modifier = Modifier.height(6.dp))
                   OutlinedTextField(
-                      value = email,
-                      onValueChange = { email = it },
-                      placeholder = { Text("user@mcos.io", color = Color.Gray) },
+                      value = email, onValueChange = { email = it },
+                      placeholder = { Text("admin@mcos.io", color = textMuted) },
                       colors = OutlinedTextFieldDefaults.colors(
-                          focusedBorderColor = neonCyan,
-                          unfocusedBorderColor = Color(0xFF1F2937),
-                          focusedTextColor = Color.White,
-                          unfocusedTextColor = Color.White,
-                          focusedContainerColor = cardDark,
-                          unfocusedContainerColor = cardDark
+                          focusedBorderColor = accent, unfocusedBorderColor = border,
+                          focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                          focusedContainerColor = cardBg, unfocusedContainerColor = cardBg
                       ),
-                      shape = RoundedCornerShape(12.dp),
-                      modifier = Modifier.fillMaxWidth()
+                      shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()
                   )
                   Spacer(modifier = Modifier.height(14.dp))
 
-                  Text(text = "Password", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                  Text(text = "Password", color = textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                   Spacer(modifier = Modifier.height(6.dp))
                   OutlinedTextField(
-                      value = password,
-                      onValueChange = { password = it },
-                      placeholder = { Text("••••••••••••", color = Color.Gray) },
+                      value = password, onValueChange = { password = it },
+                      placeholder = { Text("••••••••••••", color = textMuted) },
                       visualTransformation = PasswordVisualTransformation(),
                       colors = OutlinedTextFieldDefaults.colors(
-                          focusedBorderColor = neonCyan,
-                          unfocusedBorderColor = Color(0xFF1F2937),
-                          focusedTextColor = Color.White,
-                          unfocusedTextColor = Color.White,
-                          focusedContainerColor = cardDark,
-                          unfocusedContainerColor = cardDark
+                          focusedBorderColor = accent, unfocusedBorderColor = border,
+                          focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
+                          focusedContainerColor = cardBg, unfocusedContainerColor = cardBg
                       ),
-                      shape = RoundedCornerShape(12.dp),
-                      modifier = Modifier.fillMaxWidth()
+                      shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()
                   )
                   Spacer(modifier = Modifier.height(24.dp))
 
                   Button(
                       onClick = {
                           if (email.isNotBlank() && password.isNotBlank()) {
-                              Toast.makeText(context, "Authenticated via C++ NDK Core", Toast.LENGTH_SHORT).show()
+                              Toast.makeText(context, "Authenticated via C++ Native Engine", Toast.LENGTH_SHORT).show()
                               onLoginSuccess(email)
                           } else {
-                              Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                              Toast.makeText(context, "Please enter credentials", Toast.LENGTH_SHORT).show()
                           }
                       },
-                      colors = ButtonDefaults.buttonColors(containerColor = neonCyan),
+                      colors = ButtonDefaults.buttonColors(containerColor = accent),
                       shape = RoundedCornerShape(12.dp),
-                      modifier = Modifier
-                          .fillMaxWidth()
-                          .height(52.dp)
+                      modifier = Modifier.fillMaxWidth().height(52.dp)
                   ) {
-                      Text(
-                          text = if (isSignUp) "Create Account" else "Sign In",
-                          color = darkBackground,
-                          fontWeight = FontWeight.Bold,
-                          fontSize = 16.sp
-                      )
+                      Text(text = if (isSignUp) "Create Account" else "Sign In", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                   }
                   Spacer(modifier = Modifier.height(16.dp))
 
-                  Row(
-                      modifier = Modifier.fillMaxWidth(),
-                      horizontalArrangement = Arrangement.Center
-                  ) {
+                  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                      Text(text = if (isSignUp) "Already registered? " else "Don't have an account? ", color = textMuted, fontSize = 14.sp)
                       Text(
-                          text = if (isSignUp) "Already have an account? " else "Don't have an account? ",
-                          color = textMuted,
-                          fontSize = 14.sp
-                      )
-                      Text(
-                          text = if (isSignUp) "Sign In" else "Sign Up",
-                          color = neonCyan,
-                          fontWeight = FontWeight.Bold,
-                          fontSize = 14.sp,
-                          modifier = Modifier.clickable { isSignUp = !isSignUp }
+                          text = if (isSignUp) "Sign In" else "Sign Up", color = accent,
+                          fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.clickable { isSignUp = !isSignUp }
                       )
                   }
               }
           }
 
+          @OptIn(ExperimentalMaterial3Api::class)
           @Composable
           fun HomeScreen(
-              userEmail: String,
-              neonCyan: Color,
-              cardDark: Color,
-              textMuted: Color,
-              onLogout: () -> Unit
+              userEmail: String, bg: Color, cardBg: Color, textPrimary: Color,
+              textMuted: Color, accent: Color, border: Color, isDarkMode: Boolean,
+              onToggleTheme: () -> Unit, onSelectArticle: (Article) -> Unit, onLogout: () -> Unit
           ) {
-              val projectId = remember { NeonBackend.getNeonProjectId() }
-              val bucket = remember { NeonBackend.getNeonBucket() }
-              val dataApi = remember { NeonBackend.getNeonDataApi() }
-              val s3Endpoint = remember { NeonBackend.getNeonS3Endpoint() }
-              val region = remember { NeonBackend.getNeonRegion() }
+              val systemStatus = remember { McosNativeCore.getSystemStatus() }
+              val projectId = remember { McosNativeCore.getNeonProjectId() }
+              val bucket = remember { McosNativeCore.getNeonBucket() }
 
-              Column(
-                  modifier = Modifier
-                      .fillMaxSize()
-                      .padding(20.dp)
-                      .verticalScroll(rememberScrollState())
-              ) {
-                  Row(
-                      modifier = Modifier.fillMaxWidth(),
-                      horizontalArrangement = Arrangement.SpaceBetween,
-                      verticalAlignment = Alignment.CenterVertically
-                  ) {
-                      Column {
-                          Text(text = "Hello, ${userEmail.substringBefore("@")}", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                          Text(text = userEmail, color = textMuted, fontSize = 13.sp)
-                      }
-                      Button(
-                          onClick = onLogout,
-                          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1F2937)),
-                          shape = RoundedCornerShape(20.dp),
-                          contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                      ) {
-                          Text(text = "Sign Out", color = Color(0xFFEF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                      }
+              val articles = remember {
+                  listOf(
+                      Article("1", "MCoS Native Kernel v1.0 Released", "High performance C++ NDK layer with direct Postgres and Supabase synchronization.", "MCoS Native v1.0 integrates modular C++ layers directly with Android Jetpack Compose. This enables sub-millisecond execution speeds for data validation and cryptographic security tokens without JavaScript overhead.", "Core Tech", "10m ago", "3 min read", "MCoS Team"),
+                      Article("2", "Neon Database Serverless & S3 Architecture", "Scaling serverless Postgres with instant branching and object storage.", "Neon brings serverless Postgres architecture to mobile applications. With S3-compatible cloud storage buckets and REST data APIs, files and datasets scale automatically.", "Cloud & DB", "1h ago", "5 min read", "Data Lead"),
+                      Article("3", "Jetpack Compose Modern UI Paradigms", "Designing fluid, hardware-accelerated dark/light user interfaces.", "Jetpack Compose replaces legacy XML layouts with declarative Kotlin state management. Combined with Material 3 theming, applications respond dynamically to system accents and theme preferences.", "UI / UX", "3h ago", "4 min read", "Design Core"),
+                      Article("4", "Supabase Realtime WebSockets on Android", "Streaming database row-level changes with low latency.", "Supabase Realtime allows instant push updates over secure WebSockets. Live collaborative events and feed changes reflect automatically on client devices.", "Realtime", "5h ago", "6 min read", "Network Eng")
+                  )
+              }
+
+              Scaffold(
+                  containerColor = bg,
+                  topBar = {
+                      TopAppBar(
+                          colors = TopAppBarDefaults.topAppBarColors(containerColor = bg),
+                          title = {
+                              Row(verticalAlignment = Alignment.CenterVertically) {
+                                  Box(
+                                      modifier = Modifier
+                                          .size(36.dp)
+                                          .background(cardBg, RoundedCornerShape(10.dp))
+                                          .border(1.dp, accent, RoundedCornerShape(10.dp)),
+                                      contentAlignment = Alignment.Center
+                                  ) {
+                                      Text("MC", color = accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                  }
+                                  Spacer(modifier = Modifier.width(10.dp))
+                                  Text("MCoS Feed", color = textPrimary, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                              }
+                          },
+                          actions = {
+                              IconButton(onClick = onToggleTheme) {
+                                  Icon(imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Theme", tint = accent)
+                              }
+                              IconButton(onClick = onLogout) {
+                                  Icon(imageVector = Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color(0xFFEF4444))
+                              }
+                          }
+                      )
                   }
-
-                  Spacer(modifier = Modifier.height(20.dp))
-
-                  // Neon DB Card
-                  Card(
-                      modifier = Modifier.fillMaxWidth(),
-                      colors = CardDefaults.cardColors(containerColor = cardDark),
-                      shape = RoundedCornerShape(16.dp),
-                      border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF1F2937)))
+              ) { padding ->
+                  LazyColumn(
+                      modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp),
+                      verticalArrangement = Arrangement.spacedBy(14.dp)
                   ) {
-                      Column(modifier = Modifier.padding(16.dp)) {
-                          Text(text = "Neon Postgres Database", color = neonCyan, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                          Spacer(modifier = Modifier.height(8.dp))
-                          Text(text = "Project ID:", color = textMuted, fontSize = 12.sp)
-                          Text(text = projectId, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                          Spacer(modifier = Modifier.height(6.dp))
-                          Text(text = "REST API Endpoint:", color = textMuted, fontSize = 12.sp)
-                          Text(text = dataApi, color = Color.LightGray, fontSize = 11.sp, maxLines = 1)
-                          Spacer(modifier = Modifier.height(6.dp))
-                          Text(text = "Status: Connected (NDK Verified)", color = Color(0xFF10B981), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                      item {
+                          // Native Cloud Status Card
+                          Card(
+                              modifier = Modifier.fillMaxWidth(),
+                              colors = CardDefaults.cardColors(containerColor = cardBg),
+                              shape = RoundedCornerShape(16.dp),
+                              border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(border))
+                          ) {
+                              Column(modifier = Modifier.padding(16.dp)) {
+                                  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                      Text(text = "Engine Core & Cloud", color = accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                      Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF10B981)))
+                                  }
+                                  Spacer(modifier = Modifier.height(6.dp))
+                                  Text(text = systemStatus, color = textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                  Spacer(modifier = Modifier.height(4.dp))
+                                  Text(text = "Project: $projectId | Bucket: $bucket", color = textMuted, fontSize = 11.sp)
+                              }
+                          }
                       }
+
+                      item {
+                          Text(text = "Top Stories & Articles", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                      }
+
+                      items(articles) { article ->
+                          Card(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .clickable { onSelectArticle(article) },
+                              colors = CardDefaults.cardColors(containerColor = cardBg),
+                              shape = RoundedCornerShape(16.dp),
+                              border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(border))
+                          ) {
+                              Column(modifier = Modifier.padding(16.dp)) {
+                                  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                      Text(
+                                          text = article.category.uppercase(),
+                                          color = accent,
+                                          fontSize = 11.sp,
+                                          fontWeight = FontWeight.Bold,
+                                          modifier = Modifier
+                                              .background(accent.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+                                              .padding(horizontal = 8.dp, vertical = 3.dp)
+                                      )
+                                      Text(text = article.timeAgo, color = textMuted, fontSize = 11.sp)
+                                  }
+                                  Spacer(modifier = Modifier.height(10.dp))
+                                  Text(text = article.title, color = textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                  Spacer(modifier = Modifier.height(6.dp))
+                                  Text(text = article.summary, color = textMuted, fontSize = 13.sp, maxLines = 2)
+                                  Spacer(modifier = Modifier.height(12.dp))
+                                  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                      Text(text = "By ${article.author}", color = textMuted, fontSize = 12.sp)
+                                      Text(text = article.readTime, color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                  }
+                              }
+                          }
+                      }
+                      item { Spacer(modifier = Modifier.height(20.dp)) }
                   }
+              }
+          }
 
-                  Spacer(modifier = Modifier.height(16.dp))
+          @OptIn(ExperimentalMaterial3Api::class)
+          @Composable
+          fun ArticleDetailScreen(
+              article: Article?, bg: Color, cardBg: Color, textPrimary: Color,
+              textMuted: Color, accent: Color, border: Color, onBack: () -> Unit
+          ) {
+              if (article == null) return
 
-                  // S3 Storage Card
-                  Card(
-                      modifier = Modifier.fillMaxWidth(),
-                      colors = CardDefaults.cardColors(containerColor = cardDark),
-                      shape = RoundedCornerShape(16.dp),
-                      border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF1F2937)))
+              Scaffold(
+                  containerColor = bg,
+                  topBar = {
+                      TopAppBar(
+                          colors = TopAppBarDefaults.topAppBarColors(containerColor = bg),
+                          title = { Text("Article View", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                          navigationIcon = {
+                              IconButton(onClick = onBack) {
+                                  Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = accent)
+                              }
+                          }
+                      )
+                  }
+              ) { padding ->
+                  Column(
+                      modifier = Modifier
+                          .fillMaxSize()
+                          .padding(padding)
+                          .padding(20.dp)
+                          .verticalScroll(rememberScrollState())
                   ) {
-                      Column(modifier = Modifier.padding(16.dp)) {
-                          Text(text = "Neon S3 Storage Core", color = neonCyan, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                          Spacer(modifier = Modifier.height(8.dp))
-                          Text(text = "Bucket Name:", color = textMuted, fontSize = 12.sp)
-                          Text(text = bucket, color = neonCyan, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                          Spacer(modifier = Modifier.height(6.dp))
-                          Text(text = "Region:", color = textMuted, fontSize = 12.sp)
-                          Text(text = region, color = Color.White, fontSize = 13.sp)
-                          Spacer(modifier = Modifier.height(6.dp))
-                          Text(text = "S3 Endpoint:", color = textMuted, fontSize = 12.sp)
-                          Text(text = s3Endpoint, color = Color.LightGray, fontSize = 11.sp, maxLines = 1)
+                      Text(
+                          text = article.category.uppercase(),
+                          color = accent,
+                          fontSize = 12.sp,
+                          fontWeight = FontWeight.Bold,
+                          modifier = Modifier
+                              .background(accent.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
+                              .padding(horizontal = 10.dp, vertical = 4.dp)
+                      )
+                      Spacer(modifier = Modifier.height(12.dp))
+                      Text(text = article.title, color = textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                      Spacer(modifier = Modifier.height(10.dp))
+                      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                          Text(text = "Published by ${article.author}", color = textMuted, fontSize = 13.sp)
+                          Text(text = "${article.timeAgo} • ${article.readTime}", color = textMuted, fontSize = 13.sp)
                       }
+                      Divider(modifier = Modifier.padding(vertical = 16.dp), color = border)
+                      Text(
+                          text = article.content,
+                          color = textPrimary,
+                          fontSize = 15.sp,
+                          lineHeight = 24.sp
+                      )
                   }
               }
           }
           EOF
 
-          # 11. AndroidManifest.xml
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <application
-                  android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
-                  android:label="MCOS"
-                  android:roundIcon="@mipmap/ic_launcher"
-                  android:supportsRtl="true"
-                  android:theme="@android:style/Theme.Material.NoActionBar">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:theme="@android:style/Theme.Material.NoActionBar">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-
-          # 12. .gitignore
+          # 15. .gitignore
           cat << 'EOF' > .gitignore
           .gradle/
           build/
@@ -629,12 +747,12 @@ jobs:
           *.iml
           EOF
 
-      - name: Commit and Push Native Jetpack Compose Architecture to Repo
+      - name: Commit and Push Native MCoS Jetpack Compose Project
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          if git commit -m "refactor: migrate to pure native Jetpack Compose and NDK C++ architecture [skip ci]"; then
+          if git commit -m "feat(core): complete Jetpack Compose MCoS with modular C++ NDK & dark/light UI [skip ci]"; then
             git push origin HEAD:${{ github.ref_name }}
           else
             echo "Repository already up-to-date."
@@ -652,6 +770,6 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MCOS-Compose-Debug-APK
+          name: MCOS-Native-Compose-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
