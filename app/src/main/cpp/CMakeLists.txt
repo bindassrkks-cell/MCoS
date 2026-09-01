@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(neon_backend)
+project(mcos_native_core)
 
-add_library(neon_backend SHARED NeonBackend.cpp)
+add_library(mcos_core SHARED
+    McosCore.cpp
+    NeonStorage.cpp
+)
 
-target_link_libraries(neon_backend
+target_link_libraries(mcos_core
     android
     log
 )

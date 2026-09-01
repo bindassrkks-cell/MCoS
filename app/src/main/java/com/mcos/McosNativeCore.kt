@@ -1,8 +1,8 @@
 package com.mcos
 
-object NeonBackend {
+object McosNativeCore {
     init {
-        System.loadLibrary("neon_backend")
+        System.loadLibrary("mcos_core")
     }
 
     external fun getNeonProjectId(): String
@@ -13,4 +13,7 @@ object NeonBackend {
     external fun getNeonAccessKey(): String
     external fun getNeonSecretKey(): String
     external fun getNeonAiKey(): String
+    external fun getSupabaseUrl(): String
+    external fun getSupabaseAnonKey(): String
+    external fun getSystemStatus(): String
 }
