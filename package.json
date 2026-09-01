@@ -8,14 +8,11 @@
   },
   "dependencies": {
     "react": "18.2.0",
-    "react-native": "0.73.6"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.20.0",
-    "@babel/preset-env": "^7.20.0",
-    "@babel/runtime": "^7.20.0",
-    "@react-native/babel-preset": "0.73.21",
+    "react-native": "0.73.6",
     "@react-native/metro-config": "0.73.5",
+    "@react-native/babel-preset": "0.73.21",
+    "@babel/core": "^7.20.0",
+    "@babel/runtime": "^7.20.0",
     "@types/react": "^18.2.6",
     "typescript": "^5.0.4"
   }
