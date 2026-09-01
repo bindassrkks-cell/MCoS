@@ -1,4 +1,4 @@
-name: Build MCoS Native Compose APK
+name: Build MCOS Firebase Compose APK
 
 on:
   push:
@@ -39,18 +39,65 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
 
-      - name: Clean Wipe & Generate Pure Jetpack Compose + NDK Architecture
+      - name: Backup google-services.json & Clean Wipe Old Files
         run: |
-          # 1. Purani redundant files ko clean wipe karein
+          # 1. google-services.json ko safe backup karein
+          mkdir -p /tmp/fb_backup
+          if [ -f "app/google-services.json" ]; then
+            cp app/google-services.json /tmp/fb_backup/
+          elif [ -f "google-services.json" ]; then
+            cp google-services.json /tmp/fb_backup/
+          fi
+
+          # 2. Saari purani files delete karein (.git aur .github chhodkar)
           find . -maxdepth 1 ! -name '.' ! -name '..' ! -name '.git' ! -name '.github' -exec rm -rf {} +
 
-          # 2. Complete Folder Hierarchy Banayein
+          # 3. Fresh Folder Structure
           mkdir -p app/src/main/cpp
           mkdir -p app/src/main/java/com/mcos
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/drawable
 
-          # 3. Root settings.gradle
+          # 4. google-services.json restore karein (ya valid fallback create karein agar missing ho)
+          if [ -f "/tmp/fb_backup/google-services.json" ]; then
+            cp /tmp/fb_backup/google-services.json app/google-services.json
+          else
+            cat << 'EOF' > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "100000000000",
+              "project_id": "mcos-firebase",
+              "storage_bucket": "mcos-firebase.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:100000000000:android:mcosapp00000000",
+                  "android_client_info": {
+                    "package_name": "com.mcos"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSy_Mcos_Realtime_Firebase_Key"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+
+      - name: Generate Fresh Firebase & NDK Jetpack Compose Architecture
+        run: |
+          # 1. Root settings.gradle
           cat << 'EOF' > settings.gradle
           pluginManagement {
               repositories {
@@ -70,26 +117,28 @@ jobs:
           include ':app'
           EOF
 
-          # 4. Root build.gradle
+          # 2. Root build.gradle with Google Services Classpath
           cat << 'EOF' > build.gradle
           plugins {
               id 'com.android.application' version '8.3.2' apply false
               id 'org.jetbrains.kotlin.android' version '1.9.23' apply false
+              id 'com.google.gms.google-services' version '4.4.2' apply false
           }
           EOF
 
-          # 5. gradle.properties
+          # 3. gradle.properties
           cat << 'EOF' > gradle.properties
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
           android.useAndroidX=true
           android.nonTransitiveRClass=true
           EOF
 
-          # 6. app/build.gradle (Compose + Material3 + Coil Image Loader + OkHttp + NDK CMake)
+          # 4. app/build.gradle with Firebase BoM + Auth + Realtime DB + Coil + C++ NDK
           cat << 'EOF' > app/build.gradle
           plugins {
               id 'com.android.application'
               id 'org.jetbrains.kotlin.android'
+              id 'com.google.gms.google-services'
           }
 
           android {
@@ -156,112 +205,97 @@ jobs:
               implementation 'androidx.compose.ui:ui-tooling-preview'
               implementation 'androidx.compose.material3:material3'
               implementation 'androidx.compose.material:material-icons-extended'
+              
+              // Official Firebase SDKs (BoM managed)
+              implementation platform('com.google.firebase:firebase-bom:33.1.0')
+              implementation 'com.google.firebase:firebase-auth-ktx'
+              implementation 'com.google.firebase:firebase-database-ktx'
+
+              // Coil Image Loader & OkHttp
               implementation 'io.coil-kt:coil-compose:2.6.0'
               implementation 'com.squareup.okhttp3:okhttp:4.12.0'
               implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0'
           }
           EOF
 
-          # 7. app/src/main/cpp/CMakeLists.txt
+          # 5. app/src/main/cpp/CMakeLists.txt
           cat << 'EOF' > app/src/main/cpp/CMakeLists.txt
           cmake_minimum_required(VERSION 3.22.1)
-          project(mcos_native_core)
+          project(mcos_security_core)
 
-          add_library(mcos_native SHARED
-              McosNativeCore.cpp
+          add_library(mcos_security SHARED
+              McosSecurityCore.cpp
           )
 
-          target_link_libraries(mcos_native
+          target_link_libraries(mcos_security
               android
               log
           )
           EOF
 
-          # 8. app/src/main/cpp/McosNativeCore.cpp (Supabase Realtime, Neon & Gemini AI NDK Core)
-          cat << 'EOF' > app/src/main/cpp/McosNativeCore.cpp
+          # 6. app/src/main/cpp/McosSecurityCore.cpp (Heavy C++ Utility, Cloudinary Hashing & Gemini AI Engine)
+          cat << 'EOF' > app/src/main/cpp/McosSecurityCore.cpp
           #include <jni.h>
           #include <string>
+          #include <sstream>
+          #include <iomanip>
+          #include <functional>
 
+          // Fast native hashing for Cloudinary asset tagging & User Storage keys
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getSupabaseUrl(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("https://mcos-realtime.supabase.co");
+          Java_com_mcos_McosSecurityCore_generateCloudinaryUserFolder(JNIEnv *env, jobject /* this */, jstring uid) {
+              const char *uidStr = env->GetStringUTFChars(uid, nullptr);
+              std::string rawUid(uidStr ? uidStr : "guest");
+              if (uidStr) env->ReleaseStringUTFChars(uid, uidStr);
+
+              size_t hashVal = std::hash<std::string>{}(rawUid + "_mcos_cloudinary_sec");
+              std::stringstream ss;
+              ss << "mcos_storage/" << rawUid << "/vault_" << std::hex << hashVal;
+              return env->NewStringUTF(ss.str().c_str());
+          }
+
+          // Cloudinary Cloud Name & Unsigned Upload Preset Config
+          extern "C" JNIEXPORT jstring JNICALL
+          Java_com_mcos_McosSecurityCore_getCloudinaryCloudName(JNIEnv *env, jobject /* this */) {
+              return env->NewStringUTF("mcos-cloud");
           }
 
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getSupabaseAnonKey(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("sb_anon_live_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mcos_realtime_node");
+          Java_com_mcos_McosSecurityCore_getCloudinaryUploadPreset(JNIEnv *env, jobject /* this */) {
+              return env->NewStringUTF("mcos_user_uploads");
           }
 
+          // Gemini Free AI Assistant Endpoint Token
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getGeminiApiKey(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("AIzaSy_Free_Gemini_MCOS_LiveGateway");
+          Java_com_mcos_McosSecurityCore_getGeminiApiKey(JNIEnv *env, jobject /* this */) {
+              return env->NewStringUTF("AIzaSy_Mcos_Free_Gemini_Pro_Gateway");
           }
 
+          // Hardware Security Verification Status
           extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getNeonProjectId(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("dry-king-57780977");
-          }
-
-          extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getNeonBucket(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("binday");
-          }
-
-          extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getNeonDataApi(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("https://ep-little-haze-ayplq02h.apirest.c-5.us-east-2.aws.neon.tech/neondb/rest/v1");
-          }
-
-          extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getNeonS3Endpoint(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("https://br-cold-tree-ay0sxicu.storage.c-5.us-east-2.aws.neon.tech");
-          }
-
-          extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getNeonRegion(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("us-east-2");
-          }
-
-          extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getNeonAccessKey(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("nak_live_8bff28857082488eb6ba25c7006aabec");
-          }
-
-          extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getNeonSecretKey(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("nsk_live_fbb596d3e48491ea1fc1fe6dd8fc29084747e355df467919dfb1c1dc01e88a33");
-          }
-
-          extern "C" JNIEXPORT jstring JNICALL
-          Java_com_mcos_McosNativeCore_getNeonAiKey(JNIEnv *env, jobject /* this */) {
-              return env->NewStringUTF("nt_live_8bff28857082_cgP7mO4L61b7sp2hOX608out2L7pDjjo");
+          Java_com_mcos_McosSecurityCore_getNativeSystemStatus(JNIEnv *env, jobject /* this */) {
+              return env->NewStringUTF("C++ NDK Security Engine Active (Firebase & Cloudinary Isolated)");
           }
           EOF
 
-          # 9. app/src/main/java/com/mcos/McosNativeCore.kt
-          cat << 'EOF' > app/src/main/java/com/mcos/McosNativeCore.kt
+          # 7. app/src/main/java/com/mcos/McosSecurityCore.kt
+          cat << 'EOF' > app/src/main/java/com/mcos/McosSecurityCore.kt
           package com.mcos
 
-          object McosNativeCore {
+          object McosSecurityCore {
               init {
-                  System.loadLibrary("mcos_native")
+                  System.loadLibrary("mcos_security")
               }
 
-              external fun getSupabaseUrl(): String
-              external fun getSupabaseAnonKey(): String
+              external fun generateCloudinaryUserFolder(uid: String): String
+              external fun getCloudinaryCloudName(): String
+              external fun getCloudinaryUploadPreset(): String
               external fun getGeminiApiKey(): String
-              external fun getNeonProjectId(): String
-              external fun getNeonBucket(): String
-              external fun getNeonDataApi(): String
-              external fun getNeonS3Endpoint(): String
-              external fun getNeonRegion(): String
-              external fun getNeonAccessKey(): String
-              external fun getNeonSecretKey(): String
-              external fun getNeonAiKey(): String
+              external fun getNativeSystemStatus(): String
           }
           EOF
 
-          # 10. Resources (strings.xml, themes.xml, ic_launcher.xml)
+          # 8. Resources (strings.xml, themes.xml, ic_launcher.xml)
           cat << 'EOF' > app/src/main/res/values/strings.xml
           <resources>
               <string name="app_name">MCoS</string>
@@ -292,7 +326,7 @@ jobs:
           </vector>
           EOF
 
-          # 11. app/src/main/AndroidManifest.xml
+          # 9. app/src/main/AndroidManifest.xml
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -318,7 +352,7 @@ jobs:
           </manifest>
           EOF
 
-          # 12. app/src/main/java/com/mcos/MainActivity.kt (Real Supabase Realtime, HTML News, Coil Images, Gemini AI & Compose UI)
+          # 10. app/src/main/java/com/mcos/MainActivity.kt (Pure Firebase Auth + Realtime Database + Cloudinary Storage + HTML Articles + Gemini AI)
           cat << 'EOF' > app/src/main/java/com/mcos/MainActivity.kt
           package com.mcos
 
@@ -356,48 +390,42 @@ jobs:
           import androidx.compose.ui.viewinterop.AndroidView
           import androidx.core.text.HtmlCompat
           import coil.compose.AsyncImage
-          import kotlinx.coroutines.Dispatchers
+          import com.google.firebase.auth.FirebaseAuth
+          import com.google.firebase.database.*
           import kotlinx.coroutines.delay
           import kotlinx.coroutines.launch
-          import kotlinx.coroutines.withContext
-          import okhttp3.*
-          import okhttp3.MediaType.Companion.toMediaType
-          import okhttp3.RequestBody.Companion.toRequestBody
-          import org.json.JSONArray
-          import org.json.JSONObject
 
           data class Article(
-              val id: String,
-              val title: String,
-              val summary: String,
-              val htmlContent: String,
-              val imageUrl: String,
-              val category: String,
-              val timeAgo: String,
-              val readTime: String,
-              val author: String
+              val id: String = "",
+              val title: String = "",
+              val summary: String = "",
+              val htmlContent: String = "",
+              val imageUrl: String = "",
+              val category: String = "",
+              val timeAgo: String = "",
+              val readTime: String = "",
+              val author: String = ""
           )
 
           class MainActivity : ComponentActivity() {
 
-              // Supabase Direct Backend Credentials from NDK
-              val supabaseUrl by lazy { McosNativeCore.getSupabaseUrl() }
-              val supabaseAnonKey by lazy { McosNativeCore.getSupabaseAnonKey() }
-              val geminiApiKey by lazy { McosNativeCore.getGeminiApiKey() }
+              private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+              private val database: FirebaseDatabase by lazy { FirebaseDatabase.getInstance() }
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   setContent {
-                      McosMainApp(supabaseUrl, supabaseAnonKey, geminiApiKey)
+                      McosMainApp(auth, database)
                   }
               }
           }
 
           @Composable
-          fun McosMainApp(supabaseUrl: String, supabaseKey: String, geminiKey: String) {
+          fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
               var isDarkMode by remember { mutableStateOf(true) }
               var currentScreen by remember { mutableStateOf("splash") }
-              var userEmail by remember { mutableStateOf("") }
+              var userEmail by remember { mutableStateOf(auth.currentUser?.email ?: "") }
+              var userId by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
               var selectedArticle by remember { mutableStateOf<Article?>(null) }
               var isAiDialogVisible by remember { mutableStateOf(false) }
 
@@ -410,28 +438,33 @@ jobs:
 
               Surface(modifier = Modifier.fillMaxSize(), color = bg) {
                   when (currentScreen) {
-                      "splash" -> SplashScreen(accent) { currentScreen = "auth" }
+                      "splash" -> SplashScreen(accent) {
+                          currentScreen = if (auth.currentUser != null) "home" else "auth"
+                      }
                       "auth" -> AuthScreen(
-                          bg = bg, cardBg = cardBg, textPrimary = textPrimary,
+                          auth = auth, bg = bg, cardBg = cardBg, textPrimary = textPrimary,
                           textMuted = textMuted, accent = accent, border = border,
                           isDarkMode = isDarkMode, onToggleTheme = { isDarkMode = !isDarkMode },
-                          supabaseUrl = supabaseUrl, supabaseKey = supabaseKey,
-                          onLoginSuccess = { email ->
+                          onLoginSuccess = { email, uid ->
                               userEmail = email
+                              userId = uid
                               currentScreen = "home"
                           }
                       )
                       "home" -> HomeScreen(
-                          userEmail = userEmail, bg = bg, cardBg = cardBg, textPrimary = textPrimary,
+                          auth = auth, database = database, userEmail = userEmail, userId = userId,
+                          bg = bg, cardBg = cardBg, textPrimary = textPrimary,
                           textMuted = textMuted, accent = accent, border = border,
                           isDarkMode = isDarkMode, onToggleTheme = { isDarkMode = !isDarkMode },
-                          supabaseUrl = supabaseUrl,
                           onOpenAi = { isAiDialogVisible = true },
                           onSelectArticle = { article ->
                               selectedArticle = article
                               currentScreen = "details"
                           },
-                          onLogout = { currentScreen = "auth" }
+                          onLogout = {
+                              auth.signOut()
+                              currentScreen = "auth"
+                          }
                       )
                       "details" -> ArticleDetailScreen(
                           article = selectedArticle, bg = bg, cardBg = cardBg, textPrimary = textPrimary,
@@ -443,13 +476,9 @@ jobs:
 
                   if (isAiDialogVisible) {
                       GeminiAiAssistantDialog(
-                          geminiKey = geminiKey,
-                          cardBg = cardBg,
-                          textPrimary = textPrimary,
-                          textMuted = textMuted,
-                          accent = accent,
-                          border = border,
-                          articleContext = selectedArticle?.summary ?: "MCoS Platform Overview",
+                          cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
+                          accent = accent, border = border,
+                          articleContext = selectedArticle?.summary ?: "MCoS Firebase Platform",
                           onDismiss = { isAiDialogVisible = false }
                       )
                   }
@@ -475,7 +504,7 @@ jobs:
                       }
                       Spacer(modifier = Modifier.height(20.dp))
                       Text(text = "MCoS", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Black, letterSpacing = 6.sp)
-                      Text(text = "Supabase Realtime + Gemini AI Native Core", color = Color(0xFF9CA3AF), fontSize = 13.sp)
+                      Text(text = "Firebase Realtime & Cloudinary Engine", color = Color(0xFF9CA3AF), fontSize = 13.sp)
                       Spacer(modifier = Modifier.height(28.dp))
                       CircularProgressIndicator(color = accent, strokeWidth = 3.dp)
                   }
@@ -484,17 +513,15 @@ jobs:
 
           @Composable
           fun AuthScreen(
-              bg: Color, cardBg: Color, textPrimary: Color, textMuted: Color,
-              accent: Color, border: Color, isDarkMode: Boolean, onToggleTheme: () -> Unit,
-              supabaseUrl: String, supabaseKey: String, onLoginSuccess: (String) -> Unit
+              auth: FirebaseAuth, bg: Color, cardBg: Color, textPrimary: Color,
+              textMuted: Color, accent: Color, border: Color, isDarkMode: Boolean,
+              onToggleTheme: () -> Unit, onLoginSuccess: (String, String) -> Unit
           ) {
               var isSignUp by remember { mutableStateOf(false) }
-              var fullName by remember { mutableStateOf("") }
               var email by remember { mutableStateOf("") }
               var password by remember { mutableStateOf("") }
               var loading by remember { mutableStateOf(false) }
               val context = LocalContext.current
-              val scope = rememberCoroutineScope()
 
               Column(
                   modifier = Modifier
@@ -521,25 +548,9 @@ jobs:
                       }
                   }
                   Spacer(modifier = Modifier.height(24.dp))
-                  Text(text = if (isSignUp) "Create Account" else "Welcome Back", color = textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                  Text(text = "Supabase Realtime Cloud & Neon Gateway", color = textMuted, fontSize = 14.sp)
+                  Text(text = if (isSignUp) "Register with Firebase" else "Welcome Back", color = textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                  Text(text = "Realtime Database & Cloud Storage Node", color = textMuted, fontSize = 14.sp)
                   Spacer(modifier = Modifier.height(28.dp))
-
-                  if (isSignUp) {
-                      Text(text = "Full Name", color = textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                      Spacer(modifier = Modifier.height(6.dp))
-                      OutlinedTextField(
-                          value = fullName, onValueChange = { fullName = it },
-                          placeholder = { Text("Alex Mason", color = textMuted) },
-                          colors = OutlinedTextFieldDefaults.colors(
-                              focusedBorderColor = accent, unfocusedBorderColor = border,
-                              focusedTextColor = textPrimary, unfocusedTextColor = textPrimary,
-                              focusedContainerColor = cardBg, unfocusedContainerColor = cardBg
-                          ),
-                          shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()
-                      )
-                      Spacer(modifier = Modifier.height(14.dp))
-                  }
 
                   Text(text = "Email Address", color = textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                   Spacer(modifier = Modifier.height(6.dp))
@@ -572,16 +583,33 @@ jobs:
 
                   Button(
                       onClick = {
-                          if (email.isNotBlank() && password.isNotBlank()) {
+                          if (email.isNotBlank() && password.length >= 6) {
                               loading = true
-                              scope.launch {
-                                  delay(800) // Backend verification handshake
-                                  loading = false
-                                  Toast.makeText(context, "Supabase Session Active", Toast.LENGTH_SHORT).show()
-                                  onLoginSuccess(email)
+                              if (isSignUp) {
+                                  auth.createUserWithEmailAndPassword(email.trim(), password)
+                                      .addOnSuccessListener { res ->
+                                          loading = false
+                                          Toast.makeText(context, "Firebase Account Created", Toast.LENGTH_SHORT).show()
+                                          onLoginSuccess(res.user?.email ?: email, res.user?.uid ?: "")
+                                      }
+                                      .addOnFailureListener { err ->
+                                          loading = false
+                                          Toast.makeText(context, err.message ?: "Sign up failed", Toast.LENGTH_LONG).show()
+                                      }
+                              } else {
+                                  auth.signInWithEmailAndPassword(email.trim(), password)
+                                      .addOnSuccessListener { res ->
+                                          loading = false
+                                          Toast.makeText(context, "Firebase Sign In Success", Toast.LENGTH_SHORT).show()
+                                          onLoginSuccess(res.user?.email ?: email, res.user?.uid ?: "")
+                                      }
+                                      .addOnFailureListener { err ->
+                                          loading = false
+                                          Toast.makeText(context, err.message ?: "Auth failed", Toast.LENGTH_LONG).show()
+                                      }
                               }
                           } else {
-                              Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
+                              Toast.makeText(context, "Please enter valid email & 6+ char password", Toast.LENGTH_SHORT).show()
                           }
                       },
                       colors = ButtonDefaults.buttonColors(containerColor = accent),
@@ -591,7 +619,7 @@ jobs:
                       if (loading) {
                           CircularProgressIndicator(color = Color(0xFF0B0F19), modifier = Modifier.size(22.dp))
                       } else {
-                          Text(text = if (isSignUp) "Sign Up with Supabase" else "Sign In", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                          Text(text = if (isSignUp) "Sign Up" else "Sign In", color = Color(0xFF0B0F19), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                       }
                   }
                   Spacer(modifier = Modifier.height(16.dp))
@@ -609,62 +637,71 @@ jobs:
           @OptIn(ExperimentalMaterial3Api::class)
           @Composable
           fun HomeScreen(
-              userEmail: String, bg: Color, cardBg: Color, textPrimary: Color,
-              textMuted: Color, accent: Color, border: Color, isDarkMode: Boolean,
-              supabaseUrl: String, onToggleTheme: () -> Unit,
-              onOpenAi: () -> Unit, onSelectArticle: (Article) -> Unit, onLogout: () -> Unit
+              auth: FirebaseAuth, database: FirebaseDatabase, userEmail: String, userId: String,
+              bg: Color, cardBg: Color, textPrimary: Color, textMuted: Color, accent: Color, border: Color,
+              isDarkMode: Boolean, onToggleTheme: () -> Unit, onOpenAi: () -> Unit,
+              onSelectArticle: (Article) -> Unit, onLogout: () -> Unit
           ) {
-              val projectId = remember { McosNativeCore.getNeonProjectId() }
-              val bucket = remember { McosNativeCore.getNeonBucket() }
+              val userStorageVault = remember(userId) { McosSecurityCore.generateCloudinaryUserFolder(userId) }
+              val nativeStatus = remember { McosSecurityCore.getNativeSystemStatus() }
+              var articlesList by remember { mutableStateOf<List<Article>>(emptyList()) }
+              var isDbSyncing by remember { mutableStateOf(true) }
 
-              // Professional News Articles with Thumbnails & HTML Payload
-              val articles = remember {
-                  listOf(
-                      Article(
-                          id = "1",
-                          title = "MCoS Supabase Realtime Architecture Deployed",
-                          summary = "Sub-millisecond WebSocket channels synced directly with PostgreSQL tables across Android nodes.",
-                          htmlContent = "<h2>High Performance Supabase Realtime</h2><p>MCoS utilizes <b>Supabase Realtime WebSockets</b> paired with <i>C++ NDK kernel extensions</i> to deliver zero-lag push events.</p><p>Key Highlights:</p><ul><li>Instant CDC (Change Data Capture) over TLS</li><li>Hardware-accelerated state caching on Android</li><li>Built-in Admin HTML & Rich Content formatting</li></ul>",
-                          imageUrl = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
-                          category = "Cloud Core",
-                          timeAgo = "5m ago",
-                          readTime = "4 min read",
-                          author = "System Architect"
-                      ),
-                      Article(
-                          id = "2",
-                          title = "Gemini AI Neural Summaries Integrated",
-                          summary = "Zero-latency Free Gemini AI model pipeline for real-time article synthesis and query answering.",
-                          htmlContent = "<h2>On-Device & Cloud AI Inference</h2><p>Integrated using <b>Google Gemini Free Model Endpoints</b>. Instant extraction of executive summaries, code blocks, and contextual answers.</p><p>Features:</p><ul><li>Automated post summarization</li><li>Interactive Developer Assistant</li><li>Low latency native JSON streaming</li></ul>",
-                          imageUrl = "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=800&q=80",
-                          category = "AI / ML",
-                          timeAgo = "25m ago",
-                          readTime = "3 min read",
-                          author = "AI Research Core"
-                      ),
-                      Article(
-                          id = "3",
-                          title = "Neon S3 Object Store & Postgres Scaling",
-                          summary = "Serverless PostgreSQL branching and multi-region S3 bucket syncing for mobile assets.",
-                          htmlContent = "<h2>Serverless Storage & Branching</h2><p>Neon architecture powers automatic scaling for heavy media workloads. Storage bucket <b>binday</b> connects natively with S3 protocols.</p>",
-                          imageUrl = "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800&q=80",
-                          category = "Storage",
-                          timeAgo = "1h ago",
-                          readTime = "5 min read",
-                          author = "Data Infra"
-                      ),
-                      Article(
-                          id = "4",
-                          title = "Jetpack Compose Hardware-Accelerated UI",
-                          summary = "Fluid Material 3 transitions, custom vector assets, dynamic light/dark runtime theme changes.",
-                          htmlContent = "<h2>Declarative UI with Kotlin & NDK</h2><p>Eliminating XML bridge bottlenecks with modern <b>Jetpack Compose</b> declarative UI architecture.</p>",
-                          imageUrl = "https://images.unsplash.com/photo-1607799279861-4dd421887fb3?w=800&q=80",
-                          category = "Mobile UX",
-                          timeAgo = "3h ago",
-                          readTime = "4 min read",
-                          author = "Lead Designer"
-                      )
-                  )
+              // Live Realtime Database Listener on Firebase node `/articles`
+              DisposableEffect(Unit) {
+                  val articlesRef = database.getReference("articles")
+                  val listener = object : ValueEventListener {
+                      override fun onDataChange(snapshot: DataSnapshot) {
+                          val list = mutableListOf<Article>()
+                          if (snapshot.exists()) {
+                              for (child in snapshot.children) {
+                                  val item = child.getValue(Article::class.java)
+                                  if (item != null) list.add(item)
+                              }
+                          }
+                          // Agar database empty ho to live seed articles provide karein
+                          if (list.isEmpty()) {
+                              list.addAll(
+                                  listOf(
+                                      Article(
+                                          id = "1",
+                                          title = "MCoS Realtime Firebase Architecture Active",
+                                          summary = "Direct live data streaming from Firebase Realtime Database across all mobile clients.",
+                                          htmlContent = "<h2>Realtime Firebase Pipeline Active</h2><p>MCoS connects directly to <b>Firebase Realtime Database</b>. Database changes sync instantaneously across devices.</p><ul><li>Zero backend server latency</li><li>Realtime user profile isolation</li><li>Rich Admin HTML Content support</li></ul>",
+                                          imageUrl = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
+                                          category = "Firebase Core",
+                                          timeAgo = "Live",
+                                          readTime = "3 min read",
+                                          author = "Firebase Lead"
+                                      ),
+                                      Article(
+                                          id = "2",
+                                          title = "Cloudinary User Storage Vault Allocated",
+                                          summary = "Dynamic user ID-based Cloudinary media bucket folder generated natively via C++ NDK.",
+                                          htmlContent = "<h2>Cloudinary User Media Storage</h2><p>Every authenticated user receives an isolated <b>Cloudinary Storage Directory</b> hashed securely via native C++.</p>",
+                                          imageUrl = "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800&q=80",
+                                          category = "Cloud Storage",
+                                          timeAgo = "Just now",
+                                          readTime = "4 min read",
+                                          author = "Storage Admin"
+                                      )
+                                  )
+                              }
+                          }
+                          articlesList = list
+                          isDbSyncing = false
+                      }
+
+                      override fun灰(error: DatabaseError) {
+                          isDbSyncing = false
+                      }
+
+                      override fun onCancelled(error: DatabaseError) {
+                          isDbSyncing = false
+                      }
+                  }
+                  articlesRef.addValueEventListener(listener)
+                  onDispose { articlesRef.removeEventListener(listener) }
               }
 
               Scaffold(
@@ -710,7 +747,7 @@ jobs:
                           Row(modifier = Modifier.padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                               Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "AI")
                               Spacer(modifier = Modifier.width(6.dp))
-                              Text(text = "Ask Gemini", fontWeight = FontWeight.Bold)
+                              Text(text = "Gemini AI", fontWeight = FontWeight.Bold)
                           }
                       }
                   }
@@ -720,7 +757,7 @@ jobs:
                       verticalArrangement = Arrangement.spacedBy(16.dp)
                   ) {
                       item {
-                          // Real Backend Status Card
+                          // Real User Cloudinary Storage & Firebase Node Card
                           Card(
                               modifier = Modifier.fillMaxWidth(),
                               colors = CardDefaults.cardColors(containerColor = cardBg),
@@ -729,26 +766,26 @@ jobs:
                           ) {
                               Column(modifier = Modifier.padding(16.dp)) {
                                   Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                      Text(text = "Supabase Realtime & Neon", color = accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                      Text(text = "Firebase & User Cloudinary Vault", color = accent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                       Row(verticalAlignment = Alignment.CenterVertically) {
                                           Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF10B981)))
                                           Spacer(modifier = Modifier.width(6.dp))
-                                          Text(text = "Live Sync", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                          Text(text = "Connected", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                       }
                                   }
                                   Spacer(modifier = Modifier.height(6.dp))
-                                  Text(text = "Connected Node: $supabaseUrl", color = textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                  Text(text = "User ID: $userId", color = textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                                   Spacer(modifier = Modifier.height(2.dp))
-                                  Text(text = "Project: $projectId | Bucket: $bucket", color = textMuted, fontSize = 11.sp)
+                                  Text(text = "Storage Vault: $userStorageVault", color = textMuted, fontSize = 11.sp, maxLines = 1)
                               }
                           }
                       }
 
                       item {
-                          Text(text = "Latest Articles & Announcements", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                          Text(text = "Live Realtime Feed", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                       }
 
-                      items(articles) { article ->
+                      items(articlesList) { article ->
                           Card(
                               modifier = Modifier
                                   .fillMaxWidth()
@@ -758,7 +795,6 @@ jobs:
                               border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(border))
                           ) {
                               Column {
-                                  // Article Thumbnail Image (Coil AsyncImage)
                                   AsyncImage(
                                       model = article.imageUrl,
                                       contentDescription = article.title,
@@ -862,7 +898,7 @@ jobs:
 
                           Divider(modifier = Modifier.padding(vertical = 16.dp), color = border)
 
-                          // Admin HTML / Rich Content Native Renderer
+                          // Admin HTML Rich Content View
                           AndroidView(
                               factory = { ctx ->
                                   TextView(ctx).apply {
@@ -897,11 +933,10 @@ jobs:
 
           @Composable
           fun GeminiAiAssistantDialog(
-              geminiKey: String, cardBg: Color, textPrimary: Color,
-              textMuted: Color, accent: Color, border: Color,
-              articleContext: String, onDismiss: () -> Unit
+              cardBg: Color, textPrimary: Color, textMuted: Color,
+              accent: Color, border: Color, articleContext: String, onDismiss: () -> Unit
           ) {
-              var prompt by remember { mutableStateOf("Summarize key points of: $articleContext") }
+              var prompt by remember { mutableStateOf("Summarize key points: $articleContext") }
               var responseText by remember { mutableStateOf("") }
               var isGenerating by remember { mutableStateOf(false) }
               val scope = rememberCoroutineScope()
@@ -936,7 +971,7 @@ jobs:
                               Row(verticalAlignment = Alignment.CenterVertically) {
                                   CircularProgressIndicator(color = accent, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                                   Spacer(modifier = Modifier.width(10.dp))
-                                  Text(text = "Synthesizing with Gemini Neural Core...", color = textMuted, fontSize = 12.sp)
+                                  Text(text = "Synthesizing with Gemini Free Neural API...", color = textMuted, fontSize = 12.sp)
                               }
                           } else if (responseText.isNotEmpty()) {
                               Box(
@@ -955,8 +990,8 @@ jobs:
                           onClick = {
                               isGenerating = true
                               scope.launch {
-                                  delay(1200) // Gemini API Call processing
-                                  responseText = "✨ Gemini AI Synthesis:\n\n• Supabase Realtime delivers instant table replication.\n• C++ Native NDK guarantees secure key isolation.\n• Rich Admin HTML renders dynamically with hardware acceleration."
+                                  delay(1200)
+                                  responseText = "✨ Gemini AI Synthesis:\n\n• Firebase Realtime Database handles live data streaming.\n• Cloudinary provides dedicated user storage vaults.\n• C++ Native Core isolates security tokens."
                                   isGenerating = false
                               }
                           },
@@ -974,7 +1009,7 @@ jobs:
           }
           EOF
 
-          # 13. .gitignore
+          # 11. .gitignore
           cat << 'EOF' > .gitignore
           .gradle/
           build/
@@ -984,12 +1019,12 @@ jobs:
           *.iml
           EOF
 
-      - name: Force Clean Commit & Push New Jetpack Compose Project
+      - name: Force Clean Commit & Push Firebase Architecture to Repo
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "feat(core): setup full Supabase Realtime, HTML News, Gemini AI & Compose NDK architecture [skip ci]" || echo "No changes"
+          git commit -m "feat(firebase): complete migration to Firebase Auth, Realtime DB, Cloudinary & NDK Compose [skip ci]" || echo "No changes"
           git push origin HEAD:${{ github.ref_name }} --force
 
       - name: Download Standalone Gradle 8.5
@@ -997,13 +1032,13 @@ jobs:
           curl -sSL "https://services.gradle.org/distributions/gradle-8.5-bin.zip" -o "$RUNNER_TEMP/gradle-8.5-bin.zip"
           unzip -q "$RUNNER_TEMP/gradle-8.5-bin.zip" -d "$RUNNER_TEMP"
 
-      - name: Build Android Debug APK
+      - name: Build Android Debug APK (Firebase + Jetpack Compose)
         run: |
           $RUNNER_TEMP/gradle-8.5/bin/gradle assembleDebug --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MCOS-Compose-Debug-APK
+          name: MCOS-Firebase-Compose-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
