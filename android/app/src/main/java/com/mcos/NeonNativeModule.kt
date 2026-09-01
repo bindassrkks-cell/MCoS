@@ -16,17 +16,22 @@ class NeonNativeModule(reactContext: ReactApplicationContext) : ReactContextBase
 
     override fun getName(): String = "NeonBackend"
 
+    private external fun getNeonProjectId(): String
+    private external fun getNeonBucket(): String
+    private external fun getNeonDataApi(): String
     private external fun getNeonS3Endpoint(): String
     private external fun getNeonRegion(): String
     private external fun getNeonAccessKey(): String
     private external fun getNeonSecretKey(): String
     private external fun getNeonAiKey(): String
-    private external fun authenticateUser(email: String, pass: String): String
 
     @ReactMethod
-    fun getNeonConfig(promise: Promise) {
+    fun getFullConfig(promise: Promise) {
         try {
             val map = Arguments.createMap().apply {
+                putString("projectId", getNeonProjectId())
+                putString("bucket", getNeonBucket())
+                putString("dataApiUrl", getNeonDataApi())
                 putString("endpoint", getNeonS3Endpoint())
                 putString("region", getNeonRegion())
                 putString("accessKey", getNeonAccessKey())
@@ -35,21 +40,7 @@ class NeonNativeModule(reactContext: ReactApplicationContext) : ReactContextBase
             }
             promise.resolve(map)
         } catch (e: Exception) {
-            promise.reject("NATIVE_ERROR", e.message)
-        }
-    }
-
-    @ReactMethod
-    fun nativeLogin(email: String, pass: String, promise: Promise) {
-        try {
-            val session = authenticateUser(email, pass)
-            if (session.isNotEmpty()) {
-                promise.resolve(session)
-            } else {
-                promise.reject("AUTH_FAILED", "Invalid credentials. Password must be at least 4 characters.")
-            }
-        } catch (e: Exception) {
-            promise.reject("AUTH_ERROR", e.message)
+            promise.reject("NATIVE_CONFIG_ERROR", e.message)
         }
     }
 }

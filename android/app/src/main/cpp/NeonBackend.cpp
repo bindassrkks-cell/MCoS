@@ -1,6 +1,20 @@
 #include <jni.h>
 #include <string>
-#include <sstream>
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_mcos_NeonNativeModule_getNeonProjectId(JNIEnv *env, jobject /* this */) {
+    return env->NewStringUTF("dry-king-57780977");
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_mcos_NeonNativeModule_getNeonBucket(JNIEnv *env, jobject /* this */) {
+    return env->NewStringUTF("binday");
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_mcos_NeonNativeModule_getNeonDataApi(JNIEnv *env, jobject /* this */) {
+    return env->NewStringUTF("https://ep-little-haze-ayplq02h.apirest.c-5.us-east-2.aws.neon.tech/neondb/rest/v1");
+}
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_mcos_NeonNativeModule_getNeonS3Endpoint(JNIEnv *env, jobject /* this */) {
@@ -25,22 +39,4 @@ Java_com_mcos_NeonNativeModule_getNeonSecretKey(JNIEnv *env, jobject /* this */)
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_mcos_NeonNativeModule_getNeonAiKey(JNIEnv *env, jobject /* this */) {
     return env->NewStringUTF("nt_live_8bff28857082_cgP7mO4L61b7sp2hOX608out2L7pDjjo");
-}
-
-extern "C" JNIEXPORT jstring JNICALL
-Java_com_mcos_NeonNativeModule_authenticateUser(JNIEnv *env, jobject /* this */, jstring email, jstring password) {
-    const char *emailStr = env->GetStringUTFChars(email, nullptr);
-    const char *passStr = env->GetStringUTFChars(password, nullptr);
-
-    std::string emailCpp(emailStr ? emailStr : "");
-    std::string passCpp(passStr ? passStr : "");
-
-    if (emailStr) env->ReleaseStringUTFChars(email, emailStr);
-    if (passStr) env->ReleaseStringUTFChars(password, passStr);
-
-    if (!emailCpp.empty() && passCpp.length() >= 4) {
-        std::string token = "neon_auth_" + std::to_string(std::hash<std::string>{}(emailCpp + ":" + passCpp));
-        return env->NewStringUTF(token.c_str());
-    }
-    return env->NewStringUTF("");
 }
