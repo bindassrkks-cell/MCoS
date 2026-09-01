@@ -26,13 +26,13 @@ export default function App() {
 
   const handleLogin = () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Required', 'Please enter both Email and Password');
+      Alert.alert('Authentication', 'Please enter your email and password');
       return;
     }
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      Alert.alert('MCOS', 'Sign-in successful! Welcome to MCOS.');
+      Alert.alert('MCOS', 'Login Successful! Welcome to MCOS.');
     }, 1200);
   };
 
@@ -61,7 +61,7 @@ export default function App() {
             <Text style={styles.smallBadgeText}>MC</Text>
           </View>
           <Text style={styles.welcomeText}>Welcome to MCOS</Text>
-          <Text style={styles.instructionText}>Sign in to access your dashboard</Text>
+          <Text style={styles.instructionText}>Sign in to your account</Text>
         </View>
 
         <View style={styles.formArea}>
@@ -168,7 +168,6 @@ const styles = StyleSheet.create({
   instructionText: {
     fontSize: 14,
     color: '#9CA3AF',
-    marginTop: 6,
   },
   formArea: {
     gap: 8,
