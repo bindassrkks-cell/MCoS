@@ -3,12 +3,15 @@ package com.mcos
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -37,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -46,6 +48,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.text.HtmlCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.google.firebase.auth.FirebaseAuth
@@ -64,19 +70,29 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
-// 👉 Apni Google AI Studio se Free Gemini API Key yahan dalein:
 const val GEMINI_API_KEY = "AIzaSyA1IulxGnWIz0RGynl4-h3pL-pjlnd04jY"
 
+// Models
 data class Article(
     val id: String = "",
     val title: String = "",
     val summary: String = "",
     val htmlContent: String = "",
     val imageUrl: String = "",
+    val videoUrl: String = "", // YouTube/MP4/HLS direct video URL support
     val category: String = "",
     val timeAgo: String = "",
     val readTime: String = "",
     val author: String = ""
+)
+
+data class OfferTask(
+    val id: String,
+    val title: String,
+    val description: String,
+    val rewardCoins: Int,
+    val type: String, // "AD", "DAILY", "TASK"
+    val durationSeconds: Int = 10
 )
 
 data class VaultFile(
@@ -87,7 +103,6 @@ data class VaultFile(
 )
 
 class MainActivity : ComponentActivity() {
-
     private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
     private val database: FirebaseDatabase by lazy { FirebaseDatabase.getInstance() }
 
@@ -106,8 +121,10 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
     var userEmail by remember { mutableStateOf(auth.currentUser?.email ?: "") }
     var userId by remember { mutableStateOf(auth.currentUser?.uid ?: "") }
     var selectedArticle by remember { mutableStateOf<Article?>(null) }
+    var activeVideoUrl by remember { mutableStateOf<String?>(null) }
     var isAiDialogVisible by remember { mutableStateOf(false) }
     var isVaultAuthVisible by remember { mutableStateOf(false) }
+    var userCoins by remember { mutableIntStateOf(0) }
 
     val bg = if (isDarkMode) Color(0xFF080B11) else Color(0xFFF8FAFC)
     val cardBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFFFFFFF)
@@ -115,6 +132,19 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
     val textMuted = if (isDarkMode) Color(0xFF94A3B8) else Color(0xFF64748B)
     val accent = Color(0xFF00E5FF)
     val border = if (isDarkMode) Color(0xFF1E293B) else Color(0xFFE2E8F0)
+
+    // Realtime User Coins Listener
+    LaunchedEffect(userId) {
+        if (userId.isNotEmpty()) {
+            val coinRef = database.getReference("users").child(userId).child("coins")
+            coinRef.addValueEventListener(object : ValueEventListener {
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    userCoins = snapshot.getValue(Int::class.java) ?: 0
+                }
+                override fun onCancelled(error: DatabaseError) {}
+            })
+        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize(), color = bg) {
         when (currentScreen) {
@@ -133,15 +163,20 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
                 }
             )
             "home" -> HomeScreen(
-                database = database, userEmail = userEmail,
+                database = database, userEmail = userEmail, userCoins = userCoins,
                 bg = bg, cardBg = cardBg, textPrimary = textPrimary,
                 textMuted = textMuted, accent = accent, border = border,
                 isDarkMode = isDarkMode, onToggleTheme = { isDarkMode = !isDarkMode },
                 onOpenVault = { isVaultAuthVisible = true },
                 onOpenAi = { isAiDialogVisible = true },
+                onOpenRewards = { currentScreen = "rewards" },
                 onSelectArticle = { article ->
                     selectedArticle = article
                     currentScreen = "details"
+                },
+                onPlayDirectVideo = { url ->
+                    activeVideoUrl = url
+                    currentScreen = "player"
                 },
                 onLogout = {
                     auth.signOut()
@@ -151,17 +186,35 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
             "details" -> ArticleDetailScreen(
                 article = selectedArticle, bg = bg, cardBg = cardBg, textPrimary = textPrimary,
                 textMuted = textMuted, accent = accent, border = border,
+                onPlayVideo = { url ->
+                    activeVideoUrl = url
+                    currentScreen = "player"
+                },
                 onOpenAiSummary = { isAiDialogVisible = true },
+                onBack = { currentScreen = "home" }
+            )
+            "player" -> VideoPlayerScreen(
+                videoUriString = activeVideoUrl ?: "",
+                bg = bg, accent = accent,
+                onBack = { currentScreen = "home" }
+            )
+            "rewards" -> RewardsOfferScreen(
+                userId = userId, userCoins = userCoins, database = database,
+                bg = bg, cardBg = cardBg, textPrimary = textPrimary,
+                textMuted = textMuted, accent = accent, border = border,
                 onBack = { currentScreen = "home" }
             )
             "vault" -> PrivateVaultScreen(
                 bg = bg, cardBg = cardBg, textPrimary = textPrimary,
                 textMuted = textMuted, accent = accent, border = border,
+                onPlayVaultVideo = { file ->
+                    activeVideoUrl = file.absolutePath
+                    currentScreen = "player"
+                },
                 onBack = { currentScreen = "home" }
             )
         }
 
-        // Secret Vault PIN Verification Dialog
         if (isVaultAuthVisible) {
             VaultPinDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
@@ -174,7 +227,6 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
             )
         }
 
-        // Live Realtime Gemini AI Dialog
         if (isAiDialogVisible) {
             RealGeminiAiDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
@@ -190,7 +242,7 @@ fun McosMainApp(auth: FirebaseAuth, database: FirebaseDatabase) {
 @Composable
 fun SplashScreen(accent: Color, onTimeout: () -> Unit) {
     LaunchedEffect(Unit) {
-        delay(2000)
+        delay(1800)
         onTimeout()
     }
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -206,7 +258,7 @@ fun SplashScreen(accent: Color, onTimeout: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(20.dp))
             Text(text = "MCoS", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Black, letterSpacing = 6.sp)
-            Text(text = "Realtime Cloud & Secure Native Core", color = Color(0xFF94A3B8), fontSize = 13.sp)
+            Text(text = "Realtime Video & Reward Engine", color = Color(0xFF94A3B8), fontSize = 13.sp)
             Spacer(modifier = Modifier.height(28.dp))
             CircularProgressIndicator(color = accent, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
         }
@@ -234,7 +286,11 @@ fun AuthScreen(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Center
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
                     .size(46.dp)
@@ -255,8 +311,8 @@ fun AuthScreen(
         }
         Spacer(modifier = Modifier.height(28.dp))
         Text(text = if (isSignUp) "Create Account" else "Welcome Back", color = textPrimary, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
-        Text(text = "Secure Firebase Realtime & Vault System", color = textMuted, fontSize = 14.sp)
-        Spacer(modifier = Modifier.height(32.dp))
+        Text(text = "Join MCoS to watch streams, complete offers & earn rewards", color = textMuted, fontSize = 13.sp)
+        Spacer(modifier = Modifier.height(28.dp))
 
         Text(text = "Email Address", color = textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(6.dp))
@@ -295,7 +351,7 @@ fun AuthScreen(
                         auth.createUserWithEmailAndPassword(email.trim(), password)
                             .addOnSuccessListener { res ->
                                 loading = false
-                                Toast.makeText(context, "Account Created", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Account Created!", Toast.LENGTH_SHORT).show()
                                 onLoginSuccess(res.user?.email ?: email, res.user?.uid ?: "")
                             }
                             .addOnFailureListener { err ->
@@ -306,7 +362,6 @@ fun AuthScreen(
                         auth.signInWithEmailAndPassword(email.trim(), password)
                             .addOnSuccessListener { res ->
                                 loading = false
-                                Toast.makeText(context, "Sign In Success", Toast.LENGTH_SHORT).show()
                                 onLoginSuccess(res.user?.email ?: email, res.user?.uid ?: "")
                             }
                             .addOnFailureListener { err ->
@@ -315,7 +370,7 @@ fun AuthScreen(
                             }
                     }
                 } else {
-                    Toast.makeText(context, "Please enter valid email & 6+ character password", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Enter valid credentials (min 6 chars)", Toast.LENGTH_SHORT).show()
                 }
             },
             colors = ButtonDefaults.buttonColors(containerColor = accent),
@@ -340,17 +395,17 @@ fun AuthScreen(
     }
 }
 
-// 3. HOME SCREEN (Realtime News Feed)
+// 3. HOME SCREEN (With Direct Video Badges & Rewards Access)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    database: FirebaseDatabase, userEmail: String,
+    database: FirebaseDatabase, userEmail: String, userCoins: Int,
     bg: Color, cardBg: Color, textPrimary: Color, textMuted: Color, accent: Color, border: Color,
     isDarkMode: Boolean, onToggleTheme: () -> Unit, onOpenVault: () -> Unit,
-    onOpenAi: () -> Unit, onSelectArticle: (Article) -> Unit, onLogout: () -> Unit
+    onOpenAi: () -> Unit, onOpenRewards: () -> Unit,
+    onSelectArticle: (Article) -> Unit, onPlayDirectVideo: (String) -> Unit, onLogout: () -> Unit
 ) {
     var articlesList by remember { mutableStateOf<List<Article>>(emptyList()) }
-    var isSyncing by remember { mutableStateOf(true) }
 
     DisposableEffect(Unit) {
         val articlesRef = database.getReference("articles")
@@ -366,25 +421,23 @@ fun HomeScreen(
                 if (list.isEmpty()) {
                     list.add(
                         Article(
-                            id = "default_1",
-                            title = "MCoS Realtime Engine & Private Vault Active",
-                            summary = "Realtime cloud updates, Gemini AI integration, and hidden secret storage vault.",
-                            htmlContent = "<h2>Welcome to MCoS Engine</h2><p>Click on the <b>MC Logo</b> in the top-left corner anytime to access your hidden <b>Private Photo & Video Vault</b>.</p>",
-                            imageUrl = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
-                            category = "System Core",
+                            id = "vid_demo_1",
+                            title = "Next-Gen Android Compose & ExoPlayer Engine",
+                            summary = "Play high performance streaming videos and complete offers to unlock premium rewards.",
+                            htmlContent = "<h2>Seamless Video Streaming</h2><p>Integrated YouTube style custom ExoPlayer media renderer with hardware acceleration.</p>",
+                            imageUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80",
+                            videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+                            category = "STREAMING",
                             timeAgo = "Live",
-                            readTime = "2 min read",
-                            author = "MCoS Kernel"
+                            readTime = "4 min watch",
+                            author = "MCoS Core"
                         )
                     )
                 }
                 articlesList = list
-                isSyncing = false
             }
 
-            override fun onCancelled(error: DatabaseError) {
-                isSyncing = false
-            }
+            override fun onCancelled(error: DatabaseError) {}
         }
         articlesRef.addValueEventListener(listener)
         onDispose { articlesRef.removeEventListener(listener) }
@@ -397,7 +450,6 @@ fun HomeScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = bg),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // MC Logo Click -> Opens Secret Private Vault!
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
@@ -411,17 +463,34 @@ fun HomeScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text("MCoS Feed", color = textPrimary, fontWeight = FontWeight.Black, fontSize = 19.sp)
-                            Text("Realtime Cloud", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("MCoS Stream", color = textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp)
+                            Text("Realtime Engine", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 },
                 actions = {
+                    // Reward Coins Chip in Top Bar
+                    Surface(
+                        onClick = onOpenRewards,
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xFFF59E0B).copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(imageVector = Icons.Default.MonetizationOn, contentDescription = "Coins", tint = Color(0xFFF59E0B), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "$userCoins", color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
                     IconButton(onClick = onOpenAi) {
-                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "Gemini AI", tint = accent)
+                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "AI", tint = accent)
                     }
                     IconButton(onClick = onToggleTheme) {
-                        Icon(imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Theme", tint = accent)
+                        Icon(imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode, contentDescription = "Theme", tint = textMuted)
                     }
                     IconButton(onClick = onLogout) {
                         Icon(imageVector = Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color(0xFFEF4444))
@@ -430,30 +499,27 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onOpenAi,
-                containerColor = accent,
+            ExtendedFloatingActionButton(
+                onClick = onOpenRewards,
+                containerColor = Color(0xFFF59E0B),
                 contentColor = Color(0xFF080B11),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Row(modifier = Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "AI")
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Gemini AI", fontWeight = FontWeight.Bold)
-                }
-            }
+                shape = RoundedCornerShape(16.dp),
+                icon = { Icon(imageVector = Icons.Default.EmojiEvents, contentDescription = "Rewards") },
+                text = { Text("Ads & Offers", fontWeight = FontWeight.Bold) }
+            )
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
+                // Banner for Offerwall
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().clickable { onOpenRewards() },
                     colors = CardDefaults.cardColors(containerColor = cardBg),
                     shape = RoundedCornerShape(18.dp),
-                    border = BorderStroke(1.dp, border)
+                    border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(Color(0xFFF59E0B), accent)))
                 ) {
                     Row(
                         modifier = Modifier.padding(16.dp),
@@ -461,23 +527,23 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Hello, ${userEmail.substringBefore("@")}", color = textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            Text(text = "Tap 'MC' badge for Secret Vault", color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(text = "🎁 Complete Offers & Earn Coins", color = textPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                            Text(text = "Watch short ads & complete tasks to redeem rewards", color = textMuted, fontSize = 12.sp)
                         }
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF10B981).copy(alpha = 0.15f))
-                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFF59E0B))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Text(text = if (isSyncing) "Syncing..." else "Connected", color = Color(0xFF10B981), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Win Rewards", color = Color(0xFF080B11), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }
             }
 
             item {
-                Text(text = "Top Stories & Releases", color = textPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Latest Feeds & Media", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
 
             items(articlesList) { article ->
@@ -491,20 +557,38 @@ fun HomeScreen(
                     border = BorderStroke(1.dp, border)
                 ) {
                     Column {
-                        if (article.imageUrl.isNotBlank()) {
+                        Box(modifier = Modifier.fillMaxWidth().height(180.dp)) {
                             AsyncImage(
-                                model = article.imageUrl,
+                                model = article.imageUrl.ifBlank { "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80" },
                                 contentDescription = article.title,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(170.dp)
+                                modifier = Modifier.fillMaxSize()
                             )
+
+                            if (article.videoUrl.isNotBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color(0x55000000)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    IconButton(
+                                        onClick = { onPlayDirectVideo(article.videoUrl) },
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(CircleShape)
+                                            .background(accent)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play", tint = Color(0xFF080B11), modifier = Modifier.size(32.dp))
+                                    }
+                                }
+                            }
                         }
+
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(
-                                    text = article.category.ifBlank { "GENERAL" }.uppercase(),
+                                    text = article.category.ifBlank { "MEDIA" }.uppercase(),
                                     color = accent,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -513,17 +597,12 @@ fun HomeScreen(
                                         .background(accent.copy(alpha = 0.12f))
                                         .padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
-                                Text(text = article.timeAgo.ifBlank { "Live" }, color = textMuted, fontSize = 12.sp)
+                                Text(text = article.timeAgo.ifBlank { "Just now" }, color = textMuted, fontSize = 12.sp)
                             }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(text = article.title, color = textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(text = article.title, color = textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(text = article.summary, color = textMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "By ${article.author.ifBlank { "Admin" }}", color = textMuted, fontSize = 12.sp)
-                                Text(text = article.readTime.ifBlank { "3 min read" }, color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            }
                         }
                     }
                 }
@@ -533,12 +612,263 @@ fun HomeScreen(
     }
 }
 
-// 4. ARTICLE DETAIL SCREEN
+// 4. PROFESSIONAL YOUTUBE-STYLE VIDEO PLAYER SCREEN (ExoPlayer)
+@OptIn(UnstableApi::class)
+@Composable
+fun VideoPlayerScreen(
+    videoUriString: String,
+    bg: Color,
+    accent: Color,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            val mediaItem = MediaItem.fromUri(Uri.parse(videoUriString))
+            setMediaItem(mediaItem)
+            prepare()
+            playWhenReady = true
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = exoPlayer
+                    useController = true
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Overlay Back Button
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier
+                .padding(top = 40.dp, start = 16.dp)
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(Color(0x88000000))
+        ) {
+            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+        }
+    }
+}
+
+// 5. REWARDS & ADS OFFERWALL SCREEN
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RewardsOfferScreen(
+    userId: String,
+    userCoins: Int,
+    database: FirebaseDatabase,
+    bg: Color,
+    cardBg: Color,
+    textPrimary: Color,
+    textMuted: Color,
+    accent: Color,
+    border: Color,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    var isWatchingAd by remember { mutableStateOf(false) }
+    var adRemainingTime by remember { mutableIntStateOf(10) }
+    var currentOffer by remember { mutableStateOf<OfferTask?>(null) }
+    val scope = rememberCoroutineScope()
+
+    val offers = remember {
+        listOf(
+            OfferTask("ad_1", "Watch Sponsored Video Ad", "Watch 10 seconds commercial to win instant coins", 50, "AD", 10),
+            OfferTask("ad_2", "Special Partner Offer", "Watch 15 seconds showcase video", 75, "AD", 15),
+            OfferTask("daily_1", "Daily Login Streak", "Claim daily login bonus rewards", 100, "DAILY", 0),
+            OfferTask("task_1", "Gemini AI Query Task", "Use Gemini AI to summarize 2 topics", 150, "TASK", 0),
+            OfferTask("task_2", "Secret Vault Security Check", "Store a photo in the private locker", 200, "TASK", 0)
+        )
+    }
+
+    val completeReward = { task: OfferTask ->
+        if (userId.isNotEmpty()) {
+            val userRef = database.getReference("users").child(userId).child("coins")
+            userRef.setValue(userCoins + task.rewardCoins).addOnSuccessListener {
+                Toast.makeText(context, "+${task.rewardCoins} Coins Added to Wallet! 🎉", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // Simulated Ad Watch Timer
+    LaunchedEffect(isWatchingAd) {
+        if (isWatchingAd && currentOffer != null) {
+            adRemainingTime = currentOffer!!.durationSeconds
+            while (adRemainingTime > 0) {
+                delay(1000)
+                adRemainingTime--
+            }
+            isWatchingAd = false
+            completeReward(currentOffer!!)
+        }
+    }
+
+    Scaffold(
+        containerColor = bg,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = bg),
+                title = { Text("Rewards & Offerwall", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = accent)
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Wallet Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = cardBg),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFFF59E0B), accent)))
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text("Total Reward Balance", color = textMuted, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.MonetizationOn, contentDescription = "Coins", tint = Color(0xFFF59E0B), modifier = Modifier.size(34.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(text = "$userCoins Coins", color = textPrimary, fontSize = 32.sp, fontWeight = FontWeight.Black)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = "1000 Coins = $1.00 USD / ₹85 Instant Voucher", color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(text = "Available Offers & Tasks", color = textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            offers.forEach { offer ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp),
+                    colors = CardDefaults.cardColors(containerColor = cardBg),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, border)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(if (offer.type == "AD") Color(0xFFF59E0B).copy(alpha = 0.15f) else accent.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (offer.type == "AD") Icons.Default.PlayCircleFilled else Icons.Default.TaskAlt,
+                                    contentDescription = null,
+                                    tint = if (offer.type == "AD") Color(0xFFF59E0B) else accent
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column {
+                                Text(text = offer.title, color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(text = offer.description, color = textMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(text = "+${offer.rewardCoins} Coins", color = Color(0xFF10B981), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                if (offer.type == "AD") {
+                                    currentOffer = offer
+                                    isWatchingAd = true
+                                } else {
+                                    completeReward(offer)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = if (offer.type == "AD") Color(0xFFF59E0B) else accent),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = if (offer.type == "AD") "Watch Ad" else "Claim",
+                                color = Color(0xFF080B11),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Ad Playing Overlay Dialog
+        if (isWatchingAd) {
+            AlertDialog(
+                onDismissRequest = {},
+                containerColor = cardBg,
+                shape = RoundedCornerShape(20.dp),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.SlowMotionVideo, contentDescription = "Ad", tint = Color(0xFFF59E0B))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Playing Sponsored Video Ad", color = textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFFF59E0B), strokeWidth = 4.dp, modifier = Modifier.size(52.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(text = "Reward unlocks in: $adRemainingTime seconds", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(text = "Please don't close the app to win +${currentOffer?.rewardCoins} coins", color = textMuted, fontSize = 12.sp)
+                    }
+                },
+                confirmButton = {}
+            )
+        }
+    }
+}
+
+// 6. ARTICLE DETAIL SCREEN (With Video & AI Summary)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArticleDetailScreen(
     article: Article?, bg: Color, cardBg: Color, textPrimary: Color,
-    textMuted: Color, accent: Color, border: Color, onOpenAiSummary: () -> Unit, onBack: () -> Unit
+    textMuted: Color, accent: Color, border: Color,
+    onPlayVideo: (String) -> Unit, onOpenAiSummary: () -> Unit, onBack: () -> Unit
 ) {
     if (article == null) return
 
@@ -567,15 +897,30 @@ fun ArticleDetailScreen(
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
         ) {
-            if (article.imageUrl.isNotBlank()) {
+            Box(modifier = Modifier.fillMaxWidth().height(220.dp)) {
                 AsyncImage(
-                    model = article.imageUrl,
+                    model = article.imageUrl.ifBlank { "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80" },
                     contentDescription = article.title,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(230.dp)
+                    modifier = Modifier.fillMaxSize()
                 )
+
+                if (article.videoUrl.isNotBlank()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(Color(0x66000000)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Button(
+                            onClick = { onPlayVideo(article.videoUrl) },
+                            colors = ButtonDefaults.buttonColors(containerColor = accent),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play", tint = Color(0xFF080B11))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Play Stream Video", color = Color(0xFF080B11), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
 
             Column(modifier = Modifier.padding(20.dp)) {
@@ -590,7 +935,7 @@ fun ArticleDetailScreen(
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 )
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(text = article.title, color = textPrimary, fontSize = 23.sp, fontWeight = FontWeight.Black)
+                Text(text = article.title, color = textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(text = "By ${article.author}", color = textMuted, fontSize = 13.sp)
@@ -599,7 +944,6 @@ fun ArticleDetailScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = border)
 
-                // Admin HTML Rich Renderer
                 AndroidView(
                     factory = { ctx ->
                         TextView(ctx).apply {
@@ -632,19 +976,19 @@ fun ArticleDetailScreen(
     }
 }
 
-// 5. SECRET PRIVATE VAULT (Hidden Photo/Video Locker with .nomedia)
+// 7. SECRET PRIVATE VAULT (With Direct Player Hook)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivateVaultScreen(
     bg: Color, cardBg: Color, textPrimary: Color,
-    textMuted: Color, accent: Color, border: Color, onBack: () -> Unit
+    textMuted: Color, accent: Color, border: Color,
+    onPlayVaultVideo: (File) -> Unit, onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var vaultFiles by remember { mutableStateOf<List<VaultFile>>(emptyList()) }
     var isImporting by remember { mutableStateOf(false) }
 
-    // Hidden Directory setup (with .nomedia so gallery won't scan)
     val vaultDir = remember {
         val dir = File(context.filesDir, ".mcos_vault_hidden")
         if (!dir.exists()) dir.mkdirs()
@@ -666,7 +1010,6 @@ fun PrivateVaultScreen(
         refreshVault()
     }
 
-    // Media Picker Launcher
     val mediaPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
     ) { uris: List<Uri> ->
@@ -690,7 +1033,7 @@ fun PrivateVaultScreen(
                 withContext(Dispatchers.Main) {
                     isImporting = false
                     refreshVault()
-                    Toast.makeText(context, "Encrypted & Moved to Vault!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Encrypted & Stored in Secret Vault!", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -757,16 +1100,6 @@ fun PrivateVaultScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            if (isImporting) {
-                Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = accent)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Encrypting & Hiding files...", color = textMuted, fontSize = 12.sp)
-                    }
-                }
-            }
-
             if (vaultFiles.isEmpty() && !isImporting) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -787,7 +1120,10 @@ fun PrivateVaultScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(160.dp),
+                                .height(160.dp)
+                                .clickable {
+                                    if (vFile.isVideo) onPlayVaultVideo(vFile.file)
+                                },
                             colors = CardDefaults.cardColors(containerColor = cardBg),
                             shape = RoundedCornerShape(14.dp),
                             border = BorderStroke(1.dp, border)
@@ -806,17 +1142,13 @@ fun PrivateVaultScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(Color.Transparent, Color(0xCC080B11))
-                                            )
-                                        )
+                                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC080B11))))
                                 )
 
                                 if (vFile.isVideo) {
                                     Icon(
                                         imageVector = Icons.Default.PlayCircle,
-                                        contentDescription = "Video",
+                                        contentDescription = "Play Video",
                                         tint = accent,
                                         modifier = Modifier.align(Alignment.Center).size(36.dp)
                                     )
@@ -835,7 +1167,7 @@ fun PrivateVaultScreen(
                                         onClick = {
                                             vFile.file.delete()
                                             refreshVault()
-                                            Toast.makeText(context, "Deleted from vault", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Removed from Vault", Toast.LENGTH_SHORT).show()
                                         },
                                         modifier = Modifier.size(24.dp)
                                     ) {
@@ -851,7 +1183,7 @@ fun PrivateVaultScreen(
     }
 }
 
-// 6. VAULT PIN VERIFICATION DIALOG
+// 8. VAULT PIN DIALOG
 @Composable
 fun VaultPinDialog(
     cardBg: Color, textPrimary: Color, textMuted: Color,
@@ -882,7 +1214,7 @@ fun VaultPinDialog(
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = if (isSettingUp) "Create a 4-digit PIN to secure your hidden files." else "Enter your 4-digit PIN to access hidden media.",
+                    text = if (isSettingUp) "Create a 4-digit PIN to secure hidden files." else "Enter your 4-digit PIN to unlock media.",
                     color = textMuted, fontSize = 13.sp
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -912,17 +1244,17 @@ fun VaultPinDialog(
                     if (enteredPin.length == 4) {
                         if (isSettingUp) {
                             prefs.edit().putString("vault_pin", enteredPin).apply()
-                            Toast.makeText(context, "Vault PIN Created!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Vault PIN Configured!", Toast.LENGTH_SHORT).show()
                             onUnlocked()
                         } else {
                             if (enteredPin == savedPin) {
                                 onUnlocked()
                             } else {
-                                errorMessage = "Incorrect PIN. Try again."
+                                errorMessage = "Incorrect PIN"
                             }
                         }
                     } else {
-                        errorMessage = "Please enter 4 digits."
+                        errorMessage = "Enter 4 digits"
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = accent)
@@ -938,13 +1270,13 @@ fun VaultPinDialog(
     )
 }
 
-// 7. REAL GOOGLE GEMINI FREE MODEL API CALL
+// 9. GEMINI AI REALTIME DIALOG
 @Composable
 fun RealGeminiAiDialog(
     cardBg: Color, textPrimary: Color, textMuted: Color,
     accent: Color, border: Color, articleContext: String, onDismiss: () -> Unit
 ) {
-    var prompt by remember { mutableStateOf("Summarize key points: $articleContext") }
+    var prompt by remember { mutableStateOf("Explain in simple terms: $articleContext") }
     var responseText by remember { mutableStateOf("") }
     var isGenerating by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -1045,13 +1377,13 @@ fun RealGeminiAiDialog(
                                     }
                                 } else {
                                     withContext(Dispatchers.Main) {
-                                        responseText = "Error from Gemini API (${response.code}). Check your GEMINI_API_KEY."
+                                        responseText = "Error from Gemini API (${response.code})."
                                         isGenerating = false
                                     }
                                 }
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
-                                    responseText = "Failed to connect to Gemini: ${e.localizedMessage}"
+                                    responseText = "Connection failed: ${e.localizedMessage}"
                                     isGenerating = false
                                 }
                             }
