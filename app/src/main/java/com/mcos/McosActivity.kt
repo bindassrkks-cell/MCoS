@@ -23,9 +23,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -68,27 +71,27 @@ fun McosFeedApp(database: FirebaseDatabase, onFinish: () -> Unit) {
     val accent = Color(0xFF00E5FF)
     val border = Color(0xFF1E293B)
 
-    var posts by remember { mutableStateOf<List<PostItem>>(emptyList()) }
-    var selectedPost by remember { mutableStateOf<PostItem?>(null) }
+    var posts by remember { mutableStateOf<List<ArticlePost>>(emptyList()) }
+    var selectedPost by remember { mutableStateOf<ArticlePost?>(null) }
     var activeYouTubeId by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
         val ref = database.getReference("articles")
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val list = mutableListOf<PostItem>()
+                val list = mutableListOf<ArticlePost>()
                 for (child in snapshot.children) {
-                    child.getValue(PostItem::class.java)?.let { list.add(0, it) }
+                    child.getValue(ArticlePost::class.java)?.let { list.add(0, it) }
                 }
                 if (list.isEmpty()) {
                     list.add(
-                        PostItem(
+                        ArticlePost(
                             id = "yt_1",
                             title = "Jetpack Compose YouTube Stream Engine",
                             summary = "Hardware accelerated embedded video playback with realtime cloud feeds.",
-                            htmlContent = "<h3>Streaming Engine</h3><p>MCoS Video feed powered by YouTube IFrame & ExoPlayer architecture.</p>",
+                            htmlContent = "<h3>Streaming Engine</h3><p>MCoS Video feed powered by YouTube IFrame architecture.</p>",
                             imageUrl = "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=800&q=80",
-                            videoUrl = "M7lc1UVf-VE", // YouTube Video ID
+                            videoUrl = "M7lc1UVf-VE",
                             category = "STREAM",
                             timeAgo = "Live",
                             readTime = "5 min watch",
@@ -98,6 +101,7 @@ fun McosFeedApp(database: FirebaseDatabase, onFinish: () -> Unit) {
                 }
                 posts = list
             }
+
             override fun onCancelled(error: DatabaseError) {}
         }
         ref.addValueEventListener(listener)
@@ -106,7 +110,7 @@ fun McosFeedApp(database: FirebaseDatabase, onFinish: () -> Unit) {
 
     Surface(modifier = Modifier.fillMaxSize(), color = bg) {
         if (activeYouTubeId != null) {
-            // Fullscreen YouTube IFrame Player
+            // Fullscreen YouTube Player
             Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
                 YouTubeIFramePlayer(
                     videoId = activeYouTubeId!!,
@@ -114,19 +118,23 @@ fun McosFeedApp(database: FirebaseDatabase, onFinish: () -> Unit) {
                 )
                 IconButton(
                     onClick = { activeYouTubeId = null },
-                    modifier = Modifier.padding(top = 40.dp, start = 16.dp).size(40.dp).clip(CircleShape).background(Color(0x88000000))
+                    modifier = Modifier
+                        .padding(top = 40.dp, start = 16.dp)
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x88000000))
                 ) {
                     Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
                 }
             }
         } else if (selectedPost != null) {
-            // Article Detail Screen
+            // Post Detail View
             Scaffold(
                 containerColor = bg,
                 topBar = {
                     TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = bg),
-                        title = { Text("Post Details", color = textPrimary, fontWeight = FontWeight.Bold) },
+                        title = { Text("Post Details", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                         navigationIcon = {
                             IconButton(onClick = { selectedPost = null }) {
                                 Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = accent)
@@ -136,26 +144,45 @@ fun McosFeedApp(database: FirebaseDatabase, onFinish: () -> Unit) {
                 }
             ) { padding ->
                 Column(
-                    modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .verticalScroll(rememberScrollState())
                 ) {
                     if (selectedPost!!.videoUrl.isNotBlank()) {
                         YouTubeIFramePlayer(
                             videoId = selectedPost!!.videoUrl,
-                            modifier = Modifier.fillMaxWidth().height(220.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
                         )
                     } else if (selectedPost!!.imageUrl.isNotBlank()) {
                         AsyncImage(
                             model = selectedPost!!.imageUrl,
                             contentDescription = selectedPost!!.title,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxWidth().height(220.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
                         )
                     }
 
                     Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = selectedPost!!.category.uppercase(),
+                            color = accent,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(accent.copy(alpha = 0.12f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(text = selectedPost!!.title, color = textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Black)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(text = "By ${selectedPost!!.author} • ${selectedPost!!.timeAgo}", color = textMuted, fontSize = 12.sp)
+
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = border)
 
                         AndroidView(
@@ -178,7 +205,7 @@ fun McosFeedApp(database: FirebaseDatabase, onFinish: () -> Unit) {
                 topBar = {
                     TopAppBar(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = bg),
-                        title = { Text("MCoS Media Stream", color = textPrimary, fontWeight = FontWeight.Bold) },
+                        title = { Text("MCoS Media Stream", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                         navigationIcon = {
                             IconButton(onClick = onFinish) {
                                 Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = accent)
@@ -188,12 +215,18 @@ fun McosFeedApp(database: FirebaseDatabase, onFinish: () -> Unit) {
                 }
             ) { padding ->
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(posts) { post ->
                         Card(
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable { selectedPost = post },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(18.dp))
+                                .clickable { selectedPost = post },
                             colors = CardDefaults.cardColors(containerColor = cardBg),
                             shape = RoundedCornerShape(18.dp),
                             border = BorderStroke(1.dp, border)
@@ -208,34 +241,55 @@ fun McosFeedApp(database: FirebaseDatabase, onFinish: () -> Unit) {
                                     )
                                     if (post.videoUrl.isNotBlank()) {
                                         Box(
-                                            modifier = Modifier.fillMaxSize().background(Color(0x44000000)),
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99000000)))),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             IconButton(
                                                 onClick = { activeYouTubeId = post.videoUrl },
-                                                modifier = Modifier.size(54.dp).clip(CircleShape).background(accent)
+                                                modifier = Modifier
+                                                    .size(54.dp)
+                                                    .clip(CircleShape)
+                                                    .background(accent)
                                             ) {
-                                                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play", tint = Color(0xFF080B11), modifier = Modifier.size(34.dp))
+                                                Icon(
+                                                    imageVector = Icons.Default.PlayArrow,
+                                                    contentDescription = "Play",
+                                                    tint = Color(0xFF080B11),
+                                                    modifier = Modifier.size(34.dp)
+                                                )
                                             }
                                         }
                                     }
                                 }
 
                                 Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(text = post.title, color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text(
+                                            text = post.category.uppercase(),
+                                            color = accent,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(text = post.timeAgo, color = textMuted, fontSize = 11.sp)
+                                    }
                                     Spacer(modifier = Modifier.height(6.dp))
+                                    Text(text = post.title, color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(text = post.summary, color = textMuted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
                     }
+                    item { Spacer(modifier = Modifier.height(30.dp)) }
                 }
             }
         }
     }
 }
 
-// YouTube IFrame Renderer (WebView Native Bridge)
+// Native WebView YouTube Player Bridge
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubeIFramePlayer(videoId: String, modifier: Modifier = Modifier) {
