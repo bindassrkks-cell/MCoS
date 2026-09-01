@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 
-export default function App() {
+export default function App(): React.JSX.Element {
   const [isSplash, setIsSplash] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,7 +20,7 @@ export default function App() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsSplash(false);
-    }, 2200);
+    }, 2400);
     return () => clearTimeout(timer);
   }, []);
 
@@ -32,7 +32,7 @@ export default function App() {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      Alert.alert('MCOS', 'Login Successful! Welcome to MCOS.');
+      Alert.alert('MCOS Console', 'Login Successful! Welcome to MCOS.');
     }, 1200);
   };
 
@@ -61,7 +61,7 @@ export default function App() {
             <Text style={styles.smallBadgeText}>MC</Text>
           </View>
           <Text style={styles.welcomeText}>Welcome to MCOS</Text>
-          <Text style={styles.instructionText}>Sign in to your account</Text>
+          <Text style={styles.instructionText}>Sign in to access your console</Text>
         </View>
 
         <View style={styles.formArea}>
@@ -168,6 +168,7 @@ const styles = StyleSheet.create({
   instructionText: {
     fontSize: 14,
     color: '#9CA3AF',
+    marginTop: 6,
   },
   formArea: {
     gap: 8,
