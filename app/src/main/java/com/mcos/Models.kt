@@ -23,8 +23,9 @@ data class AdminAdOffer(
     val durationSec: Int = 10,
     val skipAfterSec: Int = 5,
     val bannerUrl: String = "",
+    val videoUrl: String = "",
     val targetUrl: String = "",
-    val type: String = "VIDEO_AD"
+    val type: String = "VIDEO_AD" // "VIDEO_AD" or "BANNER_AD"
 )
 
 data class WithdrawalRequest(
