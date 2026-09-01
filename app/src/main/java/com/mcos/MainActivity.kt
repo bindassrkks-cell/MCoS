@@ -2,7 +2,10 @@ package com.mcos
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -36,6 +39,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
@@ -146,7 +155,7 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
             )
         }
 
-        // Secret Vault PIN Dialog triggered via MC Logo
+        // Vault PIN Triggered via MC Logo
         if (isVaultPinDialogVisible) {
             VaultPinDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
@@ -170,6 +179,7 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
     }
 }
 
+// 1. SPLASH SCREEN
 @Composable
 fun SplashScreen(accent: Color, nativeVersion: String, onTimeout: () -> Unit) {
     LaunchedEffect(Unit) {
@@ -196,6 +206,7 @@ fun SplashScreen(accent: Color, nativeVersion: String, onTimeout: () -> Unit) {
     }
 }
 
+// 2. AUTH SCREEN
 @Composable
 fun AuthScreen(
     auth: FirebaseAuth, bg: Color, cardBg: Color, textPrimary: Color,
@@ -223,7 +234,7 @@ fun AuthScreen(
         }
         Spacer(modifier = Modifier.height(28.dp))
         Text(text = if (isSignUp) "Create Account" else "Welcome Back", color = textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Text(text = "Realtime Video Feeds, Rewards & Native Encryption", color = textMuted, fontSize = 13.sp)
+        Text(text = "Watch Stream Ads & Earn Instant Wallet Cash", color = textMuted, fontSize = 13.sp)
         Spacer(modifier = Modifier.height(28.dp))
 
         OutlinedTextField(
@@ -263,10 +274,10 @@ fun AuthScreen(
                         onLoginSuccess()
                     }.addOnFailureListener {
                         loading = false
-                        Toast.makeText(context, it.message ?: "Authentication error", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, it.message ?: "Auth failed", Toast.LENGTH_SHORT).show()
                     }
                 } else {
-                    Toast.makeText(context, "Enter valid email and 6+ character password", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Enter valid credentials", Toast.LENGTH_SHORT).show()
                 }
             },
             colors = ButtonDefaults.buttonColors(containerColor = accent),
@@ -288,6 +299,7 @@ fun AuthScreen(
     }
 }
 
+// 3. HOME SCREEN
 @Composable
 fun HomeScreen(
     auth: FirebaseAuth, database: FirebaseDatabase, userCoins: Int,
@@ -552,6 +564,7 @@ fun HomeScreen(
     }
 }
 
+// 4. WALLET & PAYOUT SCREEN
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(
@@ -717,6 +730,7 @@ fun WalletScreen(
     }
 }
 
+// 5. ADS & REWARD OFFERS SCREEN (Live Admin Ads)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RewardsOfferScreen(
@@ -726,8 +740,6 @@ fun RewardsOfferScreen(
 ) {
     val context = LocalContext.current
     var isWatchingAd by remember { mutableStateOf(false) }
-    var adRemainingTime by remember { mutableIntStateOf(10) }
-    var skipAvailableTime by remember { mutableIntStateOf(5) }
     var activeAd by remember { mutableStateOf<AdminAdOffer?>(null) }
     var adOffersList by remember { mutableStateOf<List<AdminAdOffer>>(emptyList()) }
 
@@ -740,9 +752,20 @@ fun RewardsOfferScreen(
                     child.getValue(AdminAdOffer::class.java)?.let { list.add(it) }
                 }
                 if (list.isEmpty()) {
-                    list.add(AdminAdOffer("ad_1", "Sponsored Partner Video", "Watch 10-sec ad to win instant coins", 50, 10, 5))
-                    list.add(AdminAdOffer("ad_2", "Premium Product Showcase", "Watch 15-sec promotional ad", 80, 15, 5))
-                    list.add(AdminAdOffer("ad_3", "Daily Streak Bonus", "Free attendance reward", 100, 0, 0))
+                    list.add(
+                        AdminAdOffer(
+                            id = "ad_1",
+                            title = "Sponsored Video Ad",
+                            description = "Watch 10-sec ad to win instant coins",
+                            rewardCoins = 50,
+                            durationSec = 10,
+                            skipAfterSec = 5,
+                            videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                            bannerUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80",
+                            targetUrl = "https://google.com",
+                            type = "VIDEO_AD"
+                        )
+                    )
                 }
                 adOffersList = list
             }
@@ -756,22 +779,8 @@ fun RewardsOfferScreen(
         if (userId.isNotEmpty()) {
             val userRef = database.getReference("users").child(userId).child("coins")
             userRef.setValue(userCoins + task.rewardCoins).addOnSuccessListener {
-                Toast.makeText(context, "+${task.rewardCoins} Coins Added! 🎉", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "+${task.rewardCoins} Coins Added to Wallet! 🎉", Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    LaunchedEffect(isWatchingAd) {
-        if (isWatchingAd && activeAd != null) {
-            adRemainingTime = activeAd!!.durationSec
-            skipAvailableTime = activeAd!!.skipAfterSec
-            while (adRemainingTime > 0) {
-                delay(1000)
-                adRemainingTime--
-                if (skipAvailableTime > 0) skipAvailableTime--
-            }
-            isWatchingAd = false
-            completeReward(activeAd!!)
         }
     }
 
@@ -808,68 +817,244 @@ fun RewardsOfferScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = offer.title, color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(text = offer.title, color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                             Text(text = offer.description, color = textMuted, fontSize = 12.sp)
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(text = "+${offer.rewardCoins} Coins", color = Color(0xFF10B981), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         Button(
                             onClick = {
-                                if (offer.durationSec > 0) {
-                                    activeAd = offer
-                                    isWatchingAd = true
-                                } else {
-                                    completeReward(offer)
-                                }
+                                activeAd = offer
+                                isWatchingAd = true
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text(if (offer.durationSec > 0) "Watch Ad" else "Claim", color = Color(0xFF080B11), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(if (offer.type == "VIDEO_AD") "Watch Ad" else "View Banner", color = Color(0xFF080B11), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }
             }
         }
 
+        // FULLSCREEN IN-STREAM VIDEO & BANNER AD PLAYER
         if (isWatchingAd && activeAd != null) {
-            AlertDialog(
-                onDismissRequest = {},
-                containerColor = cardBg,
-                shape = RoundedCornerShape(20.dp),
-                title = {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(activeAd!!.title, color = textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        if (skipAvailableTime == 0) {
-                            TextButton(onClick = { isWatchingAd = false }) {
-                                Text("Skip Ad ✕", color = accent, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                },
-                text = {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)
-                    ) {
-                        CircularProgressIndicator(color = Color(0xFFF59E0B), strokeWidth = 4.dp, modifier = Modifier.size(50.dp))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Reward unlocks in: $adRemainingTime s", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (skipAvailableTime > 0) "Skip available in: $skipAvailableTime s" else "You can skip, or watch full to receive +${activeAd!!.rewardCoins} Coins",
-                            color = textMuted,
-                            fontSize = 11.sp,
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                },
-                confirmButton = {}
+            FullscreenAdPlayer(
+                ad = activeAd!!,
+                onDismiss = { isWatchingAd = false },
+                onRewardEarned = {
+                    isWatchingAd = false
+                    completeReward(activeAd!!)
+                }
             )
         }
     }
 }
 
+// 6. FULLSCREEN YOUTUBE-STYLE VIDEO & BANNER AD COMPONENT
+@Composable
+fun FullscreenAdPlayer(
+    ad: AdminAdOffer,
+    onDismiss: () -> Unit,
+    onRewardEarned: () -> Unit
+) {
+    val context = LocalContext.current
+    var remainingTime by remember { mutableIntStateOf(ad.durationSec.coerceAtLeast(6)) }
+    var skipTimer by remember { mutableIntStateOf(ad.skipAfterSec.coerceAtLeast(3)) }
+    var isRewardClaimed by remember { mutableStateOf(false) }
+
+    // Countdown Timer
+    LaunchedEffect(Unit) {
+        while (remainingTime > 0) {
+            delay(1000)
+            remainingTime--
+            if (skipTimer > 0) skipTimer--
+        }
+        if (!isRewardClaimed) {
+            isRewardClaimed = true
+            onRewardEarned()
+        }
+    }
+
+    // Media3 ExoPlayer Instance for Video Ad
+    val exoPlayer = remember(ad.videoUrl) {
+        if (ad.type == "VIDEO_AD" && ad.videoUrl.isNotBlank()) {
+            ExoPlayer.Builder(context).build().apply {
+                val mediaItem = MediaItem.fromUri(Uri.parse(ad.videoUrl))
+                setMediaItem(mediaItem)
+                prepare()
+                playWhenReady = true
+            }
+        } else null
+    }
+
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            exoPlayer?.release()
+        }
+    }
+
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            // LAYER 1: Media Content (Video or Banner)
+            if (ad.type == "VIDEO_AD" && exoPlayer != null) {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            player = exoPlayer
+                            useController = false
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                // High Res Banner Ad Mode
+                AsyncImage(
+                    model = ad.bannerUrl.ifBlank { "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80" },
+                    contentDescription = ad.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Top-to-Bottom & Bottom-to-Top Gradient Overlays
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xCC000000), Color.Transparent, Color(0xDD000000))
+                        )
+                    )
+            )
+
+            // LAYER 2: Top Bar (Ad Badge + Title + CTA Website Button)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFF59E0B))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("Ad", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 11.sp)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = ad.title,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (ad.targetUrl.isNotBlank()) {
+                    Button(
+                        onClick = {
+                            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(ad.targetUrl))
+                            context.startActivity(browserIntent)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("Visit Site ↗", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            }
+
+            // LAYER 3: Bottom Control Bar (Reward Timer & YouTube-Style Skip Overlay)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Reward Coins Badge
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0x99000000))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(imageVector = Icons.Default.MonetizationOn, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (remainingTime > 0) "Reward in ${remainingTime}s (+${ad.rewardCoins})" else "Reward Unlocked!",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                }
+
+                // YouTube In-Stream Style Skip Button
+                if (skipTimer > 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xAA000000))
+                            .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "Skip in ${skipTimer}s",
+                            color = Color(0xFFCBD5E1),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            if (!isRewardClaimed) {
+                                isRewardClaimed = true
+                                onRewardEarned()
+                            } else {
+                                onDismiss()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Skip Ad", color = Color.Black, fontWeight = FontWeight.Black, fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(imageVector = Icons.Default.FastForward, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// 7. VAULT PIN DIALOG
 @Composable
 fun VaultPinDialog(
     cardBg: Color, textPrimary: Color, textMuted: Color,
@@ -946,6 +1131,7 @@ fun VaultPinDialog(
     )
 }
 
+// 8. GEMINI AI DIALOG
 @Composable
 fun RealGeminiAiDialog(
     cardBg: Color, textPrimary: Color, textMuted: Color,
