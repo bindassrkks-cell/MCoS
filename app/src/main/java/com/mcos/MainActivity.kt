@@ -9,6 +9,7 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.OptIn
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -16,6 +17,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -43,7 +47,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
@@ -155,7 +164,7 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
             )
         }
 
-        // Vault PIN Triggered via MC Logo
+        // Secret Vault PIN Trigger
         if (isVaultPinDialogVisible) {
             VaultPinDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
@@ -168,7 +177,7 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
             )
         }
 
-        // Live Realtime Gemini AI Dialog
+        // Realtime Gemini AI Dialog
         if (isAiDialogVisible) {
             RealGeminiAiDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
@@ -730,7 +739,7 @@ fun WalletScreen(
     }
 }
 
-// 5. ADS & REWARD OFFERS SCREEN (Live Admin Ads)
+// 5. ADS & REWARD OFFERS SCREEN (GOOGLE ADS STYLE GRID & BADGES)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RewardsOfferScreen(
@@ -755,14 +764,14 @@ fun RewardsOfferScreen(
                     list.add(
                         AdminAdOffer(
                             id = "ad_1",
-                            title = "Sponsored Video Ad",
-                            description = "Watch 10-sec ad to win instant coins",
+                            title = "GooDady Web Hosting",
+                            description = "Watch high-speed promo video to win coins",
                             rewardCoins = 50,
                             durationSec = 10,
                             skipAfterSec = 5,
                             videoUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-                            bannerUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80",
-                            targetUrl = "https://google.com",
+                            bannerUrl = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&q=80",
+                            targetUrl = "https://goodaddy.com",
                             type = "VIDEO_AD"
                         )
                     )
@@ -789,48 +798,184 @@ fun RewardsOfferScreen(
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = bg),
-                title = { Text("Ads & Reward Offers", color = textPrimary, fontWeight = FontWeight.Bold) },
+                title = { Text("Ads & Reward Offers", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = accent) }
                 }
             )
         }
     ) { padding ->
-        Column(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            adOffersList.forEach { offer ->
+            items(adOffersList) { offer ->
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable {
+                            activeAd = offer
+                            isWatchingAd = true
+                        },
                     colors = CardDefaults.cardColors(containerColor = cardBg),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(18.dp),
                     border = BorderStroke(1.dp, border)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = offer.title, color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text(text = offer.description, color = textMuted, fontSize = 12.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(text = "+${offer.rewardCoins} Coins", color = Color(0xFF10B981), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                        Button(
-                            onClick = {
-                                activeAd = offer
-                                isWatchingAd = true
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
-                            shape = RoundedCornerShape(10.dp)
+                    Column {
+                        // Media Thumbnail Box with Google Ads Badge Overlay
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(115.dp)
                         ) {
-                            Text(if (offer.type == "VIDEO_AD") "Watch Ad" else "View Banner", color = Color(0xFF080B11), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            AsyncImage(
+                                model = offer.bannerUrl.ifBlank { "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80" },
+                                contentDescription = offer.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+
+                            // Gradient Shade
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Brush.verticalGradient(listOf(Color(0x99000000), Color.Transparent, Color(0xAA080B11))))
+                            )
+
+                            // Top-Left: Google Ads Mohar / Badge
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFFF59E0B))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "Ad",
+                                        color = Color.Black,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Sponsored",
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            // Top-Right: Video / Banner Tag
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xCC000000))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (offer.type == "VIDEO_AD") Icons.Default.PlayArrow else Icons.Default.Image,
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+
+                            // Center: Video Play Overlay
+                            if (offer.type == "VIDEO_AD") {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                        .background(accent.copy(alpha = 0.9f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play", tint = Color(0xFF080B11), modifier = Modifier.size(22.dp))
+                                }
+                            }
+                        }
+
+                        // Content Details
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = offer.title,
+                                color = textPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = offer.description.ifBlank { "Watch to claim reward coins" },
+                                color = textMuted,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Reward Coins Tag
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(imageVector = Icons.Default.MonetizationOn, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = "+${offer.rewardCoins}",
+                                        color = Color(0xFF10B981),
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                                Text(
+                                    text = "${offer.durationSec}s",
+                                    color = textMuted,
+                                    fontSize = 10.sp
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Action CTA Button
+                            Button(
+                                onClick = {
+                                    activeAd = offer
+                                    isWatchingAd = true
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF59E0B)),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                modifier = Modifier.fillMaxWidth().height(36.dp)
+                            ) {
+                                Text(
+                                    text = if (offer.type == "VIDEO_AD") "Watch Ad" else "View Ad",
+                                    color = Color(0xFF080B11),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -851,7 +996,8 @@ fun RewardsOfferScreen(
     }
 }
 
-// 6. FULLSCREEN YOUTUBE-STYLE VIDEO & BANNER AD COMPONENT
+// 6. FULLSCREEN YOUTUBE-STYLE VIDEO & BANNER AD PLAYER
+@OptIn(UnstableApi::class)
 @Composable
 fun FullscreenAdPlayer(
     ad: AdminAdOffer,
@@ -862,6 +1008,7 @@ fun FullscreenAdPlayer(
     var remainingTime by remember { mutableIntStateOf(ad.durationSec.coerceAtLeast(6)) }
     var skipTimer by remember { mutableIntStateOf(ad.skipAfterSec.coerceAtLeast(3)) }
     var isRewardClaimed by remember { mutableStateOf(false) }
+    var isBuffering by remember { mutableStateOf(true) }
 
     // Countdown Timer
     LaunchedEffect(Unit) {
@@ -876,15 +1023,39 @@ fun FullscreenAdPlayer(
         }
     }
 
-    // Media3 ExoPlayer Instance for Video Ad
-    val exoPlayer = remember(ad.videoUrl) {
-        if (ad.type == "VIDEO_AD" && ad.videoUrl.isNotBlank()) {
-            ExoPlayer.Builder(context).build().apply {
-                val mediaItem = MediaItem.fromUri(Uri.parse(ad.videoUrl))
-                setMediaItem(mediaItem)
-                prepare()
-                playWhenReady = true
-            }
+    // Auto-fix GitHub links if entered as blob
+    val formattedVideoUrl = remember(ad.videoUrl) {
+        var url = ad.videoUrl.trim()
+        if (url.contains("github.com") && url.contains("/blob/")) {
+            url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+        }
+        url
+    }
+
+    // ExoPlayer Setup with Cross-Protocol Redirect & Custom User-Agent
+    val exoPlayer = remember(formattedVideoUrl) {
+        if (ad.type == "VIDEO_AD" && formattedVideoUrl.isNotBlank()) {
+            val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+                .setUserAgent("MCoS-Player/1.0")
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(15000)
+                .setReadTimeoutMs(15000)
+
+            val mediaSourceFactory = ProgressiveMediaSource.Factory(httpDataSourceFactory)
+
+            ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .build().apply {
+                    val mediaItem = MediaItem.fromUri(Uri.parse(formattedVideoUrl))
+                    setMediaItem(mediaItem)
+                    addListener(object : Player.Listener {
+                        override fun onPlaybackStateChanged(playbackState: Int) {
+                            isBuffering = (playbackState == Player.STATE_BUFFERING)
+                        }
+                    })
+                    prepare()
+                    playWhenReady = true
+                }
         } else null
     }
 
@@ -903,13 +1074,14 @@ fun FullscreenAdPlayer(
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            // LAYER 1: Media Content (Video or Banner)
+            // LAYER 1: Video View or Banner
             if (ad.type == "VIDEO_AD" && exoPlayer != null) {
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
                             player = exoPlayer
                             useController = false
+                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                             layoutParams = FrameLayout.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -918,8 +1090,13 @@ fun FullscreenAdPlayer(
                     },
                     modifier = Modifier.fillMaxSize()
                 )
+
+                if (isBuffering) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color(0xFF00E5FF), modifier = Modifier.size(44.dp))
+                    }
+                }
             } else {
-                // High Res Banner Ad Mode
                 AsyncImage(
                     model = ad.bannerUrl.ifBlank { "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80" },
                     contentDescription = ad.title,
@@ -928,7 +1105,7 @@ fun FullscreenAdPlayer(
                 )
             }
 
-            // Top-to-Bottom & Bottom-to-Top Gradient Overlays
+            // Dark Overlays
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -939,7 +1116,7 @@ fun FullscreenAdPlayer(
                     )
             )
 
-            // LAYER 2: Top Bar (Ad Badge + Title + CTA Website Button)
+            // LAYER 2: Top Bar (Google Ad Mohar + Title + CTA Website Button)
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -994,7 +1171,6 @@ fun FullscreenAdPlayer(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Reward Coins Badge
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
@@ -1012,7 +1188,6 @@ fun FullscreenAdPlayer(
                     )
                 }
 
-                // YouTube In-Stream Style Skip Button
                 if (skipTimer > 0) {
                     Box(
                         modifier = Modifier
