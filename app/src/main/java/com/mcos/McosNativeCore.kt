@@ -2,9 +2,12 @@ package com.mcos
 
 object McosNativeCore {
     init {
-        System.loadLibrary("mcos_core")
+        System.loadLibrary("mcos_native")
     }
 
+    external fun getSupabaseUrl(): String
+    external fun getSupabaseAnonKey(): String
+    external fun getGeminiApiKey(): String
     external fun getNeonProjectId(): String
     external fun getNeonBucket(): String
     external fun getNeonDataApi(): String
@@ -13,7 +16,4 @@ object McosNativeCore {
     external fun getNeonAccessKey(): String
     external fun getNeonSecretKey(): String
     external fun getNeonAiKey(): String
-    external fun getSupabaseUrl(): String
-    external fun getSupabaseAnonKey(): String
-    external fun getSystemStatus(): String
 }

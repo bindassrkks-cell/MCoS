@@ -2,6 +2,21 @@
 #include <string>
 
 extern "C" JNIEXPORT jstring JNICALL
+Java_com_mcos_McosNativeCore_getSupabaseUrl(JNIEnv *env, jobject /* this */) {
+    return env->NewStringUTF("https://mcos-realtime.supabase.co");
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_mcos_McosNativeCore_getSupabaseAnonKey(JNIEnv *env, jobject /* this */) {
+    return env->NewStringUTF("sb_anon_live_eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mcos_realtime_node");
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_mcos_McosNativeCore_getGeminiApiKey(JNIEnv *env, jobject /* this */) {
+    return env->NewStringUTF("AIzaSy_Free_Gemini_MCOS_LiveGateway");
+}
+
+extern "C" JNIEXPORT jstring JNICALL
 Java_com_mcos_McosNativeCore_getNeonProjectId(JNIEnv *env, jobject /* this */) {
     return env->NewStringUTF("dry-king-57780977");
 }
