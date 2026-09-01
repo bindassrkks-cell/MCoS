@@ -282,7 +282,6 @@ jobs:
             instructionText: {
               fontSize: 14,
               color: '#9CA3AF',
-              marginTop: 6,
             },
             formArea: {
               gap: 8,
@@ -522,26 +521,25 @@ jobs:
           .env
           EOF
 
-      - name: Generate Clean Gradle 8.5 Wrapper (Isolated)
-        run: |
-          mkdir -p /tmp/gw
-          (cd /tmp/gw && gradle wrapper --gradle-version 8.5 --distribution-type bin)
-          cp -r /tmp/gw/gradle /tmp/gw/gradlew /tmp/gw/gradlew.bat android/
-          chmod +x android/gradlew
-
       - name: Commit and Push All Sources to Repository
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          if git commit -m "feat(core): setup clean MCOS source files and gradle wrapper [skip ci]"; then
+          if git commit -m "feat(core): setup clean MCOS source files [skip ci]"; then
             git push origin HEAD:${{ github.ref_name }}
           else
             echo "Repository already up-to-date."
           fi
 
-      - name: Install All NPM Dependencies
+      - name: Install NPM Dependencies
         run: npm install --legacy-peer-deps
+
+      - name: Download and Setup Standalone Gradle 8.5
+        run: |
+          curl -sSL "https://services.gradle.org/distributions/gradle-8.5-bin.zip" -o "$RUNNER_TEMP/gradle-8.5-bin.zip"
+          unzip -q "$RUNNER_TEMP/gradle-8.5-bin.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-8.5/bin" >> $GITHUB_PATH
 
       - name: Generate Debug Keystore
         run: |
@@ -550,7 +548,7 @@ jobs:
       - name: Build Android Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          $RUNNER_TEMP/gradle-8.5/bin/gradle assembleDebug --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
