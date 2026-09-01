@@ -8,6 +8,7 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 
 export default function App() {
@@ -24,14 +25,14 @@ export default function App() {
   }, []);
 
   const handleLogin = () => {
-    if (!email || !password) {
-      alert('Please enter both Email and Password');
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Required', 'Please enter both Email and Password');
       return;
     }
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      alert('Welcome to MCOS! Auth success.');
+      Alert.alert('MCOS Console', 'Login Successful! Welcome to MCOS.');
     }, 1200);
   };
 
