@@ -7,13 +7,24 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: production
+      GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError"
+      _JAVA_OPTIONS: "-Xmx4096m"
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -29,7 +40,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate MCOS Project Files
+      - name: Generate MCOS App Files
         run: |
           # 1. package.json
           cat << 'EOF' > package.json
@@ -57,7 +68,7 @@ jobs:
           }
           EOF
 
-          # 2. app.json (Package: com.mcos)
+          # 2. app.json
           cat << 'EOF' > app.json
           {
             "expo": {
@@ -107,7 +118,7 @@ jobs:
           registerRootComponent(App);
           EOF
 
-          # 6. App.tsx (Splash + Modern Login System)
+          # 6. App.tsx (Splash + Login Screen)
           cat << 'EOF' > App.tsx
           import React, { useState, useEffect } from 'react';
           import {
@@ -278,7 +289,6 @@ jobs:
             instructionText: {
               fontSize: 14,
               color: '#9CA3AF',
-              marginTop: 6,
             },
             formArea: {
               gap: 8,
@@ -315,11 +325,36 @@ jobs:
           });
           EOF
 
+          # 7. .gitignore
+          cat << 'EOF' > .gitignore
+          node_modules/
+          .expo/
+          dist/
+          android/
+          ios/
+          EOF
+
+      - name: Commit and Push Source Files to Repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json app.json babel.config.js tsconfig.json index.js App.tsx .gitignore
+          if git commit -m "feat(core): auto-generate and push MCOS source files [skip ci]"; then
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "No new source file changes to commit."
+          fi
+
       - name: Install NPM Dependencies
         run: npm install
 
       - name: Generate Android Native Project (Expo Prebuild)
         run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Configure Gradle Memory & Jetifier Fix
+        run: |
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError" >> android/gradle.properties
+          echo "android.enableJetifier=false" >> android/gradle.properties
 
       - name: Make Gradlew Executable
         run: chmod +x android/gradlew
