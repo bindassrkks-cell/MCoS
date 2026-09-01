@@ -15,7 +15,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      NODE_ENV: production
       GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -Dorg.gradle.daemon=false"
       _JAVA_OPTIONS: "-Xmx4096m"
 
@@ -40,13 +39,13 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Create Complete MCOS Source Code
+      - name: Generate MCOS Source Structure
         run: |
           mkdir -p android/app/src/main/java/com/mcos
           mkdir -p android/app/src/main/res/values
           mkdir -p android/app/src/main/assets
 
-          # 1. package.json
+          # 1. package.json (All packages in dependencies for reliable CI installation)
           cat << 'EOF' > package.json
           {
             "name": "mcos",
@@ -58,14 +57,11 @@ jobs:
             },
             "dependencies": {
               "react": "18.2.0",
-              "react-native": "0.73.6"
-            },
-            "devDependencies": {
-              "@babel/core": "^7.20.0",
-              "@babel/preset-env": "^7.20.0",
-              "@babel/runtime": "^7.20.0",
-              "@react-native/babel-preset": "0.73.21",
+              "react-native": "0.73.6",
               "@react-native/metro-config": "0.73.5",
+              "@react-native/babel-preset": "0.73.21",
+              "@babel/core": "^7.20.0",
+              "@babel/runtime": "^7.20.0",
               "@types/react": "^18.2.6",
               "typescript": "^5.0.4"
             }
@@ -81,8 +77,9 @@ jobs:
 
           # 3. metro.config.js
           cat << 'EOF' > metro.config.js
-          const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
-          module.exports = mergeConfig(getDefaultConfig(__dirname), {});
+          const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+          const config = {};
+          module.exports = mergeConfig(getDefaultConfig(__dirname), config);
           EOF
 
           # 4. tsconfig.json
@@ -113,7 +110,7 @@ jobs:
           AppRegistry.registerComponent('mcos', () => App);
           EOF
 
-          # 6. App.tsx (Modern Splash + Neon Dark Login UI)
+          # 6. App.tsx (Neon Splash + Dark Login UI)
           cat << 'EOF' > App.tsx
           import React, { useState, useEffect } from 'react';
           import {
@@ -149,7 +146,7 @@ jobs:
               setLoading(true);
               setTimeout(() => {
                 setLoading(false);
-                Alert.alert('MCOS Console', 'Login Successful! Welcome to MCOS.');
+                Alert.alert('MCOS', 'Sign-in successful! Welcome to MCOS.');
               }, 1200);
             };
 
@@ -178,7 +175,7 @@ jobs:
                       <Text style={styles.smallBadgeText}>MC</Text>
                     </View>
                     <Text style={styles.welcomeText}>Welcome to MCOS</Text>
-                    <Text style={styles.instructionText}>Sign in to your account</Text>
+                    <Text style={styles.instructionText}>Sign in to access your dashboard</Text>
                   </View>
 
                   <View style={styles.formArea}>
@@ -285,6 +282,7 @@ jobs:
             instructionText: {
               fontSize: 14,
               color: '#9CA3AF',
+              marginTop: 6,
             },
             formArea: {
               gap: 8,
@@ -374,7 +372,6 @@ jobs:
           import android.app.Application
           import com.facebook.react.PackageList
           import com.facebook.react.ReactApplication
-          import com.facebook.react.ReactHost
           import com.facebook.react.ReactNativeHost
           import com.facebook.react.ReactPackage
           import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
@@ -406,7 +403,7 @@ jobs:
           }
           EOF
 
-          # 9. Android Gradle Files
+          # 9. Android Gradle Project Files
           cat << 'EOF' > android/build.gradle
           buildscript {
               ext {
@@ -452,6 +449,7 @@ jobs:
 
           react {
               autolinkLibrariesWithApp()
+              bundleInDebug = true
           }
 
           android {
@@ -510,39 +508,35 @@ jobs:
           </resources>
           EOF
 
+          cat << 'EOF' > android/app/src/main/res/values/strings.xml
+          <resources>
+              <string name="app_name">MCOS</string>
+          </resources>
+          EOF
+
           cat << 'EOF' > .gitignore
           node_modules/
-          .expo/
           dist/
           android/app/build/
           android/.gradle/
           .env
           EOF
 
-      - name: Commit and Push Source Files to Repository
+      - name: Commit and Push All Sources to Repo
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json App.tsx index.js tsconfig.json babel.config.js metro.config.js android/ .gitignore
-          if git commit -m "feat(core): setup clean MCOS source files and native android build [skip ci]"; then
+          if git commit -m "feat(core): initialize MCOS native source files [skip ci]"; then
             git push origin HEAD:${{ github.ref_name }}
           else
             echo "Files already up-to-date."
           fi
 
-      - name: Install NPM Dependencies
-        run: npm install
+      - name: Install All Dependencies
+        run: npm install --legacy-peer-deps
 
-      - name: Bundle React Native JavaScript Code
-        run: |
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --entry-file index.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res
-
-      - name: Setup Gradle Wrapper & Debug Keystore
+      - name: Setup Gradle Wrapper & Keystore
         run: |
           cd android
           gradle wrapper --gradle-version 8.3
