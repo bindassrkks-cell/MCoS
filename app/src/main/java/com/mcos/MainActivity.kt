@@ -65,7 +65,7 @@ import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
 
 // 👉 Apni Google AI Studio se Free Gemini API Key yahan dalein:
-const val GEMINI_API_KEY = "AIzaSy_YOUR_FREE_GEMINI_KEY_HERE"
+const val GEMINI_API_KEY = "AIzaSyA1IulxGnWIz0RGynl4-h3pL-pjlnd04jY"
 
 data class Article(
     val id: String = "",
