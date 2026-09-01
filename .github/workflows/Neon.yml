@@ -39,13 +39,13 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Generate MCOS Source Structure
+      - name: Create MCOS Source Directory & Files
         run: |
           mkdir -p android/app/src/main/java/com/mcos
           mkdir -p android/app/src/main/res/values
           mkdir -p android/app/src/main/assets
 
-          # 1. package.json (All packages in dependencies for reliable CI installation)
+          # 1. package.json
           cat << 'EOF' > package.json
           {
             "name": "mcos",
@@ -110,7 +110,7 @@ jobs:
           AppRegistry.registerComponent('mcos', () => App);
           EOF
 
-          # 6. App.tsx (Neon Splash + Dark Login UI)
+          # 6. App.tsx (Splash Screen & Dark Neon Login UI)
           cat << 'EOF' > App.tsx
           import React, { useState, useEffect } from 'react';
           import {
@@ -140,13 +140,13 @@ jobs:
 
             const handleLogin = () => {
               if (!email.trim() || !password.trim()) {
-                Alert.alert('Required', 'Please enter both Email and Password');
+                Alert.alert('Authentication', 'Please enter your email and password');
                 return;
               }
               setLoading(true);
               setTimeout(() => {
                 setLoading(false);
-                Alert.alert('MCOS', 'Sign-in successful! Welcome to MCOS.');
+                Alert.alert('MCOS', 'Login Successful! Welcome to MCOS.');
               }, 1200);
             };
 
@@ -175,7 +175,7 @@ jobs:
                       <Text style={styles.smallBadgeText}>MC</Text>
                     </View>
                     <Text style={styles.welcomeText}>Welcome to MCOS</Text>
-                    <Text style={styles.instructionText}>Sign in to access your dashboard</Text>
+                    <Text style={styles.instructionText}>Sign in to your account</Text>
                   </View>
 
                   <View style={styles.formArea}>
@@ -522,26 +522,30 @@ jobs:
           .env
           EOF
 
-      - name: Commit and Push All Sources to Repo
+      - name: Generate Clean Gradle 8.5 Wrapper (Isolated)
+        run: |
+          mkdir -p /tmp/gw
+          (cd /tmp/gw && gradle wrapper --gradle-version 8.5 --distribution-type bin)
+          cp -r /tmp/gw/gradle /tmp/gw/gradlew /tmp/gw/gradlew.bat android/
+          chmod +x android/gradlew
+
+      - name: Commit and Push All Sources to Repository
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json App.tsx index.js tsconfig.json babel.config.js metro.config.js android/ .gitignore
-          if git commit -m "feat(core): initialize MCOS native source files [skip ci]"; then
+          git add -A
+          if git commit -m "feat(core): setup clean MCOS source files and gradle wrapper [skip ci]"; then
             git push origin HEAD:${{ github.ref_name }}
           else
-            echo "Files already up-to-date."
+            echo "Repository already up-to-date."
           fi
 
-      - name: Install All Dependencies
+      - name: Install All NPM Dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Setup Gradle Wrapper & Keystore
+      - name: Generate Debug Keystore
         run: |
-          cd android
-          gradle wrapper --gradle-version 8.3
-          keytool -genkey -v -keystore app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          chmod +x gradlew
+          keytool -genkey -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Build Android Debug APK
         run: |
