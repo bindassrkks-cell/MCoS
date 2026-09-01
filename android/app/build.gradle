@@ -6,6 +6,7 @@ plugins {
 android {
     namespace "com.mcos"
     compileSdk 34
+    ndkVersion "26.1.10909125"
 
     defaultConfig {
         applicationId "com.mcos"
@@ -13,6 +14,19 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
     }
 
     signingConfigs {

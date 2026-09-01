@@ -1,6 +1,7 @@
 package com.mcos
 
 import android.app.Application
+import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactNativeHost
 import com.facebook.react.ReactPackage
@@ -13,11 +14,11 @@ class MainApplication : Application(), ReactApplication {
         override fun getUseDeveloperSupport(): Boolean = false
 
         override fun getPackages(): List<ReactPackage> = listOf(
-            MainReactPackage()
+            MainReactPackage(),
+            NeonPackage()
         )
 
         override fun getJSMainModuleName(): String = "index"
-
         override fun getBundleAssetName(): String = "index.android.bundle"
     }
 
