@@ -44,7 +44,7 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager --install "ndk;26.1.10909125" "cmake;3.22.1"
 
-      - name: Create Native C++ & JNI Bridge Files
+      - name: Create Native C++ & Fixed Kotlin JNI Bridge
         run: |
           mkdir -p android/app/src/main/cpp
           mkdir -p android/app/src/main/java/com/mcos
@@ -193,12 +193,11 @@ jobs:
           }
           EOF
 
-          # 5. MainApplication.kt (Registered Package)
+          # 5. MainApplication.kt (Cleaned without missing PackageList reference)
           cat << 'EOF' > android/app/src/main/java/com/mcos/MainApplication.kt
           package com.mcos
 
           import android.app.Application
-          import com.facebook.react.PackageList
           import com.facebook.react.ReactApplication
           import com.facebook.react.ReactNativeHost
           import com.facebook.react.ReactPackage
@@ -303,7 +302,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add android/app/src/main/cpp/ android/app/src/main/java/com/mcos/NeonNativeModule.kt android/app/src/main/java/com/mcos/NeonPackage.kt android/app/src/main/java/com/mcos/MainApplication.kt android/app/build.gradle
-          if git commit -m "feat(native): integrate C++ neon backend core and JNI bridge [skip ci]"; then
+          if git commit -m "fix(core): remove unresolved PackageList and link C++ native module [skip ci]"; then
             git push origin HEAD:${{ github.ref_name }}
           else
             echo "Native backend files already committed."
