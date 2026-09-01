@@ -53,43 +53,6 @@ import java.util.concurrent.TimeUnit
 
 const val GEMINI_API_KEY = "AIzaSyA1IulxGnWIz0RGynl4-h3pL-pjlnd04jY"
 
-// Models
-data class ArticlePost(
-    val id: String = "",
-    val title: String = "",
-    val summary: String = "",
-    val htmlContent: String = "",
-    val imageUrl: String = "",
-    val videoUrl: String = "",
-    val category: String = "TECH",
-    val timeAgo: String = "Just now",
-    val readTime: String = "3 min",
-    val author: String = "Admin"
-)
-
-data class AdminAdOffer(
-    val id: String = "ad_1",
-    val title: String = "Sponsored Video Ad",
-    val description: String = "Watch to earn reward coins",
-    val rewardCoins: Int = 50,
-    val durationSec: Int = 10,
-    val skipAfterSec: Int = 5,
-    val bannerUrl: String = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80",
-    val type: String = "VIDEO_AD"
-)
-
-data class WithdrawalRequest(
-    val id: String = "",
-    val userId: String = "",
-    val userEmail: String = "",
-    val paymentType: String = "UPI", // UPI or PAYTM
-    val paymentAddress: String = "",
-    val coinsDebited: Int = 0,
-    val amountInInr: Double = 0.0,
-    val timestamp: Long = System.currentTimeMillis(),
-    val status: String = "PENDING"
-)
-
 class MainActivity : ComponentActivity() {
 
     companion object {
@@ -183,7 +146,7 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
             )
         }
 
-        // Secret Vault PIN Dialog triggered exclusively via MC Logo
+        // Secret Vault PIN Dialog triggered via MC Logo
         if (isVaultPinDialogVisible) {
             VaultPinDialog(
                 cardBg = cardBg, textPrimary = textPrimary, textMuted = textMuted,
@@ -207,7 +170,6 @@ fun MainAppRoot(auth: FirebaseAuth, database: FirebaseDatabase, nativeVersion: S
     }
 }
 
-// 1. SPLASH SCREEN
 @Composable
 fun SplashScreen(accent: Color, nativeVersion: String, onTimeout: () -> Unit) {
     LaunchedEffect(Unit) {
@@ -234,7 +196,6 @@ fun SplashScreen(accent: Color, nativeVersion: String, onTimeout: () -> Unit) {
     }
 }
 
-// 2. AUTH SCREEN
 @Composable
 fun AuthScreen(
     auth: FirebaseAuth, bg: Color, cardBg: Color, textPrimary: Color,
@@ -327,7 +288,6 @@ fun AuthScreen(
     }
 }
 
-// 3. HOME DASHBOARD (Fixed Header, Vault Card Hidden, 2 Dynamic Media Sections)
 @Composable
 fun HomeScreen(
     auth: FirebaseAuth, database: FirebaseDatabase, userCoins: Int,
@@ -339,7 +299,6 @@ fun HomeScreen(
 ) {
     var articlesList by remember { mutableStateOf<List<ArticlePost>>(emptyList()) }
     var featuredPost by remember { mutableStateOf<ArticlePost?>(null) }
-    val context = LocalContext.current
 
     DisposableEffect(Unit) {
         val ref = database.getReference("articles")
@@ -386,7 +345,6 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Left: Logo Badge (Tap triggers secret vault PIN) & Title
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -406,9 +364,7 @@ fun HomeScreen(
                         }
                     }
 
-                    // Right: Wallet Coins Pill, AI, Theme, Logout
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Wallet Coins Button
                         Surface(
                             onClick = onOpenWallet,
                             shape = RoundedCornerShape(20.dp),
@@ -453,7 +409,6 @@ fun HomeScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // SECTION 1: Featured Video Hero Card (YouTube Banner Style)
             if (featuredPost != null) {
                 item {
                     Text("🔥 Featured Stream", color = textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -481,7 +436,6 @@ fun HomeScreen(
                                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD080B11))))
                                 )
 
-                                // Play Button Badge
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.Center)
@@ -493,7 +447,6 @@ fun HomeScreen(
                                     Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play", tint = Color(0xFF080B11), modifier = Modifier.size(34.dp))
                                 }
 
-                                // Category & Duration Badge
                                 Row(
                                     modifier = Modifier
                                         .align(Alignment.BottomStart)
@@ -531,7 +484,6 @@ fun HomeScreen(
                 }
             }
 
-            // SECTION 2: Responsive Feed & Post Grid
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -600,7 +552,6 @@ fun HomeScreen(
     }
 }
 
-// 4. WALLET & WITHDRAWAL SCREEN (UPI & Paytm)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(
@@ -610,12 +561,11 @@ fun WalletScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
-    var selectedMethod by remember { mutableStateOf("UPI") } // UPI or PAYTM
+    var selectedMethod by remember { mutableStateOf("UPI") }
     var paymentAddress by remember { mutableStateOf("") }
     var withdrawCoinsInput by remember { mutableStateOf("500") }
     var isSubmitting by remember { mutableStateOf(false) }
 
-    // Conversion: 100 Coins = ₹1 INR
     val coinsToInrRate = 0.01
     val requestedCoins = withdrawCoinsInput.toIntOrNull() ?: 0
     val convertedAmountInr = requestedCoins * coinsToInrRate
@@ -640,7 +590,6 @@ fun WalletScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Balance Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = cardBg),
@@ -667,7 +616,6 @@ fun WalletScreen(
 
             Text("Withdrawal Method", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
 
-            // Payment Mode Selector (UPI vs Paytm)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
                     onClick = { selectedMethod = "UPI" },
@@ -747,7 +695,7 @@ fun WalletScreen(
                         database.getReference("withdrawals").child(reqId).setValue(requestObj).addOnSuccessListener {
                             database.getReference("users").child(userId).child("coins").setValue(newCoins)
                             isSubmitting = false
-                            Toast.makeText(context, "Withdrawal Request Submitted Successfully! 🎉", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Withdrawal Request Submitted! 🎉", Toast.LENGTH_LONG).show()
                             onBack()
                         }.addOnFailureListener {
                             isSubmitting = false
@@ -769,7 +717,6 @@ fun WalletScreen(
     }
 }
 
-// 5. ADS & REWARDS SCREEN (Admin Synced with Dynamic Timer & Skip Option)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RewardsOfferScreen(
@@ -784,7 +731,6 @@ fun RewardsOfferScreen(
     var activeAd by remember { mutableStateOf<AdminAdOffer?>(null) }
     var adOffersList by remember { mutableStateOf<List<AdminAdOffer>>(emptyList()) }
 
-    // Fetch Admin Ads in Realtime
     DisposableEffect(Unit) {
         val ref = database.getReference("admin_ads")
         val listener = object : ValueEventListener {
@@ -810,12 +756,11 @@ fun RewardsOfferScreen(
         if (userId.isNotEmpty()) {
             val userRef = database.getReference("users").child(userId).child("coins")
             userRef.setValue(userCoins + task.rewardCoins).addOnSuccessListener {
-                Toast.makeText(context, "+${task.rewardCoins} Coins Added to Wallet! 🎉", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "+${task.rewardCoins} Coins Added! 🎉", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // Dynamic Video Ad Countdown Timer
     LaunchedEffect(isWatchingAd) {
         if (isWatchingAd && activeAd != null) {
             adRemainingTime = activeAd!!.durationSec
@@ -887,7 +832,6 @@ fun RewardsOfferScreen(
             }
         }
 
-        // Fullscreen/Dialog Video Ad Overlay with Skip Option
         if (isWatchingAd && activeAd != null) {
             AlertDialog(
                 onDismissRequest = {},
@@ -913,7 +857,7 @@ fun RewardsOfferScreen(
                         Text("Reward unlocks in: $adRemainingTime s", color = textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (skipAvailableTime > 0) "Skip option available in: $skipAvailableTime s" else "You can skip, or watch full to receive +${activeAd!!.rewardCoins} Coins",
+                            text = if (skipAvailableTime > 0) "Skip available in: $skipAvailableTime s" else "You can skip, or watch full to receive +${activeAd!!.rewardCoins} Coins",
                             color = textMuted,
                             fontSize = 11.sp,
                             textAlign = TextAlign.Center
@@ -926,7 +870,6 @@ fun RewardsOfferScreen(
     }
 }
 
-// 6. VAULT PIN DIALOG (Exclusively Triggered via MC Logo)
 @Composable
 fun VaultPinDialog(
     cardBg: Color, textPrimary: Color, textMuted: Color,
@@ -1003,7 +946,6 @@ fun VaultPinDialog(
     )
 }
 
-// 7. GEMINI AI DIALOG
 @Composable
 fun RealGeminiAiDialog(
     cardBg: Color, textPrimary: Color, textMuted: Color,
